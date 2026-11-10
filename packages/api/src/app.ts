@@ -28,6 +28,27 @@ export const Commit = z
 
 export type Commit = z.infer<typeof Commit>;
 
+export const Segment = z
+  .object({
+    bookId: z.number().int().openapi({ description: '1..66 in canonical order' }),
+    startChapter: z.number().int(),
+    startVerse: z.number().int(),
+    endChapter: z.number().int(),
+    endVerse: z.number().int(),
+  })
+  .openapi('Segment', { description: 'A contiguous passage within one book, inclusive.' });
+
+export const Parsed = z
+  .object({
+    /** Merged, in canonical order. */
+    segments: z.array(Segment),
+    display: z.string().openapi({ example: 'John 3' }),
+    verseCount: z.number().int(),
+    readOn: z.iso.date(),
+    summary: z.string().openapi({ example: 'John 3 · 36 verses · today' }),
+  })
+  .openapi('Parsed');
+
 export interface User {
   id: string;
   timezone: string;
@@ -91,6 +112,34 @@ const createGuestRoute = createRoute({
   },
 });
 
+const parseRoute = createRoute({
+  method: 'post',
+  path: '/parse',
+  summary: 'Parse a reading without committing it',
+  description:
+    'Sign-in is optional. Today is the caller\'s local date when an `Authorization` header is sent, else the date in `timezone` (default UTC).',
+  request: {
+    body: {
+      required: true,
+      ...json(
+        z.object({
+          text: z.string().max(500).openapi({ example: 'yesterday john 3:16-18' }),
+          /** Used when the text has no date phrase. */
+          readOn: z.iso.date().optional(),
+          timezone: Timezone.optional(),
+        }),
+        'What was read',
+      ),
+    },
+  },
+  responses: {
+    200: json(Parsed, 'The parsed reading'),
+    400: json(ErrorBody, 'Invalid body'),
+    401: unauthorized,
+    422: json(ErrorBody, 'The text could not be parsed, or the date is in the future'),
+  },
+});
+
 const createCommitRoute = createRoute({
   method: 'post',
   path: '/commits',
@@ -102,7 +151,7 @@ const createCommitRoute = createRoute({
       ...json(
         z.object({
           text: z.string().max(500).openapi({ example: 'john 3' }),
-          /** Defaults to the user's local today. */
+          /** Used when the text has no date phrase. Defaults to the user's local today. */
           readOn: z.iso.date().optional(),
         }),
         'What was read',
@@ -151,20 +200,31 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
     return c.json({ token }, 201);
   });
 
+  app.openapi(parseRoute, async (c) => {
+    const { text, readOn, timezone } = c.req.valid('json');
+    let tz = timezone ?? 'UTC';
+    if (c.req.header('authorization')) {
+      const user = await caller(c);
+      if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+      tz = user.timezone;
+    }
+    const parsed = parse(text, { today: localDate(now(), tz), readOn });
+    if (!parsed.ok) return c.json({ error: parsed.error }, 422);
+    const { segments, display, verseCount, readOn: date, summary } = parsed;
+    return c.json({ segments, display, verseCount, readOn: date, summary }, 200);
+  });
+
   app.openapi(createCommitRoute, async (c) => {
     const user = await caller(c);
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
     const { text, readOn } = c.req.valid('json');
     const createdAt = now();
-    const today = localDate(createdAt, user.timezone);
-    const parsed = parse(text, { today });
+    const parsed = parse(text, { today: localDate(createdAt, user.timezone), readOn });
     if (!parsed.ok) return c.json({ error: parsed.error }, 422);
-    const date = readOn ?? parsed.readOn;
-    if (date > today) return c.json({ error: 'that date is in the future' }, 422);
     const commit = await deps.createCommit({
       id: crypto.randomUUID(),
       userId: user.id,
-      readOn: date,
+      readOn: parsed.readOn,
       rawInput: text,
       display: parsed.display,
       createdAt,

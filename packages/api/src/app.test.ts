@@ -42,7 +42,7 @@ describe('canon', () => {
     expect(res.status).toBe(200);
     const doc = await res.json();
     expect(doc.openapi).toBe('3.1.0');
-    expect(Object.keys(doc.paths)).toEqual(expect.arrayContaining(['/api/canon/totals', '/api/guests', '/api/commits']));
+    expect(Object.keys(doc.paths)).toEqual(expect.arrayContaining(['/api/canon/totals', '/api/guests', '/api/parse', '/api/commits']));
   });
 });
 
@@ -117,10 +117,61 @@ describe('POST /api/commits', () => {
     expect(await future.json()).toEqual({ error: 'that date is in the future' });
   });
 
+  it('lets a date in the text beat readOn', async () => {
+    const auth = await newGuest('America/Chicago');
+    const res = await post('/api/commits', { text: 'yesterday psalm 23', readOn: '2026-11-01' }, auth);
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ readOn: '2026-11-08', display: 'Psalm 23' });
+  });
+
+  it('stores merged ranges for a multi-passage commit', async () => {
+    const auth = await newGuest();
+    const res = await post('/api/commits', { text: 'gen 2, gen 1, john 1:1', readOn: '2026-11-01' }, auth);
+    expect(await res.json()).toMatchObject({ display: 'Genesis 1–2; John 1:1', verseCount: 57 });
+    expect(await list(auth)).toMatchObject([{ display: 'Genesis 1–2; John 1:1', verseCount: 57 }]);
+  });
+
   it('requires a valid guest token', async () => {
     expect((await post('/api/commits', { text: 'john 3' })).status).toBe(401);
     expect((await post('/api/commits', { text: 'john 3' }, { Authorization: 'Guest not-a-real-token' })).status).toBe(401);
     expect((await post('/api/commits', { text: 'john 3' }, { Authorization: 'Bearer something' })).status).toBe(401);
+  });
+});
+
+describe('POST /api/parse', () => {
+  it('parses without writing anything', async () => {
+    const auth = await newGuest('America/Chicago');
+    const res = await post('/api/parse', { text: 'jn 3:16-18, 20' }, auth);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      segments: [
+        { bookId: 43, startChapter: 3, startVerse: 16, endChapter: 3, endVerse: 18 },
+        { bookId: 43, startChapter: 3, startVerse: 20, endChapter: 3, endVerse: 20 },
+      ],
+      display: 'John 3:16–18, 3:20',
+      verseCount: 4,
+      // Still Nov 9 in Chicago.
+      readOn: '2026-11-09',
+      summary: 'John 3:16–18, 3:20 · 4 verses · today',
+    });
+    expect(await list(auth)).toEqual([]);
+  });
+
+  it('needs no sign-in, using the given timezone or UTC', async () => {
+    expect(await (await post('/api/parse', { text: 'gen 1' })).json()).toMatchObject({ readOn: '2026-11-10' });
+    expect(await (await post('/api/parse', { text: 'gen 1', timezone: 'America/Chicago' })).json()).toMatchObject({ readOn: '2026-11-09' });
+  });
+
+  it('applies readOn, but a date in the text wins', async () => {
+    const body = (text: string) => ({ text, readOn: '2026-11-01', timezone: 'UTC' });
+    expect(await (await post('/api/parse', body('gen 1'))).json()).toMatchObject({ readOn: '2026-11-01' });
+    expect(await (await post('/api/parse', body('3 days ago gen 1'))).json()).toMatchObject({ readOn: '2026-11-07' });
+  });
+
+  it('returns the parse error', async () => {
+    const res = await post('/api/parse', { text: 'jud 1' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'Judges or Jude?' });
   });
 });
 

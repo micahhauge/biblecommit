@@ -93,6 +93,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/parse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Parse a reading without committing it
+         * @description Sign-in is optional. Today is the caller's local date when an `Authorization` header is sent, else the date in `timezone` (default UTC).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description What was read */
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example yesterday john 3:16-18 */
+                        text: string;
+                        /** Format: date */
+                        readOn?: string;
+                        /** @example America/Chicago */
+                        timezone?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The parsed reading */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Parsed"];
+                    };
+                };
+                /** @description Invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or unknown credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description The text could not be parsed, or the date is in the future */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/commits": {
         parameters: {
             query?: never;
@@ -209,6 +287,25 @@ export interface components {
         };
         Error: {
             error: string;
+        };
+        Parsed: {
+            segments: components["schemas"]["Segment"][];
+            /** @example John 3 */
+            display: string;
+            verseCount: number;
+            /** Format: date */
+            readOn: string;
+            /** @example John 3 · 36 verses · today */
+            summary: string;
+        };
+        /** @description A contiguous passage within one book, inclusive. */
+        Segment: {
+            /** @description 1..66 in canonical order */
+            bookId: number;
+            startChapter: number;
+            startVerse: number;
+            endChapter: number;
+            endVerse: number;
         };
         Commit: {
             /** Format: uuid */

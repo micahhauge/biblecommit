@@ -40,14 +40,18 @@ async function postCommit(text: string, token: string): Promise<Commit> {
   }
 }
 
-/** Commits a reading, creating the guest first if this is the browser's first commit. */
-export function useCommit() {
+/**
+ * Commits a reading, creating the guest first if this is the browser's first commit.
+ * `onSaved` runs as soon as the server has the commit, before the recent list updates.
+ */
+export function useCommit({ onSaved }: { onSaved?: (commit: Commit) => void } = {}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (text: string) => {
       const existing = getGuestToken();
       if (existing) {
         const commit = await postCommit(text, existing);
+        onSaved?.(commit);
         await queryClient.invalidateQueries({ queryKey: recentKey });
         return commit;
       }
@@ -55,6 +59,7 @@ export function useCommit() {
       const token = await createGuest();
       try {
         const commit = await postCommit(text, token);
+        onSaved?.(commit);
         // Seed the list before storing the token: storing it enables the recent-commits
         // query, and seeding first saves a request and keeps the example chips from flashing back.
         queryClient.setQueryData<Commit[]>(recentKey, [commit]);

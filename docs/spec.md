@@ -27,7 +27,7 @@ Friends & friend streaks · groups · badges/plates · public profiles · notifi
 ### Canon
 - Protestant 66 books, standard English (KJV-lineage) versification as the only scheme.
 - 1,189 chapters, 31,102 verses. Every verse has a sequential integer ID `1..31102` in canonical order, so any passage is a contiguous ID range.
-- Canon data (books, chapters, verse counts) lives in `packages/core` and is seeded into Postgres. **Todo:** pick a public-domain source for verse counts and check it against the 31,102 total.
+- Canon data (books, chapters, verse counts) lives in `packages/core` and is seeded into Postgres. Verse counts come from a public-domain KJV text and are checked by tests against 66 books / 1,189 chapters / 31,102 verses.
 
 ### Committing a reading
 - A **commit** is one submission of the input: the raw text, the date it counts for, and one or more verse ranges.
@@ -204,8 +204,8 @@ Heatmap, coverage, and streak are derived by query. If it gets slow, add a `user
 - **Canon layout: rows.** One row per book, wrapping to the screen width.
 
 ### Open
-- [ ] Verse-count data source
-- [ ] Domain
+- [x] Verse-count data source: public-domain KJV text (verse counts only), verified 66 / 1,189 / 31,102
+- [x] Domain: biblecommit.com
 
 ---
 

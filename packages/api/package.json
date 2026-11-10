@@ -1,0 +1,24 @@
+{
+  "name": "@biblecommit/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "openapi": "tsx src/print-openapi.ts"
+  },
+  "dependencies": {
+    "@biblecommit/core": "workspace:*",
+    "@biblecommit/db": "workspace:*",
+    "@hono/zod-openapi": "^1.6.3",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.17",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

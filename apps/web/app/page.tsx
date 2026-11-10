@@ -1,10 +1,5 @@
-import { CanonTotals } from '@/components/CanonTotals';
+import { Today } from '@/components/Today';
 
 export default function TodayPage() {
-  return (
-    <section className="entry">
-      <h2>today</h2>
-      <CanonTotals />
-    </section>
-  );
+  return <Today />;
 }

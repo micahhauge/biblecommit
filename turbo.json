@@ -1,0 +1,24 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "ENABLE_EXPERIMENTAL_COREPACK"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {},
+    "typecheck": {}
+  }
+}

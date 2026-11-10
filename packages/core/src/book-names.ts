@@ -22,7 +22,7 @@ const ALIASES: Record<string, string> = {
   '1pt': '1 Peter', '2pt': '2 Peter', '1jn': '1 John', '2jn': '2 John', '3jn': '3 John', rv: 'Revelation', rev: 'Revelation',
 };
 
-export type BookLookup = { ok: true; book: Book } | { ok: false; error: string };
+export type BookLookup = { ok: true; book: Book } | { ok: false; reason: 'unknown' | 'ambiguous'; error: string };
 
 /** Resolves a typed book name (spec §2): alias table first, then full name, then unique prefix of ≥2 letters. */
 export function findBook(name: string): BookLookup {
@@ -33,8 +33,8 @@ export function findBook(name: string): BookLookup {
   if (exact) return { ok: true, book: exact };
   const matches = typed.replace(/\d/g, '').length >= 2 ? BOOKS.filter((b) => key(b.name).startsWith(typed)) : [];
   if (matches.length === 1) return { ok: true, book: matches[0]! };
-  if (matches.length > 1) return { ok: false, error: `${orList(matches.map((b) => b.name))}?` };
-  return { ok: false, error: `unknown book “${name}”` };
+  if (matches.length > 1) return { ok: false, reason: 'ambiguous', error: `${orList(matches.map((b) => b.name))}?` };
+  return { ok: false, reason: 'unknown', error: `unknown book “${name}”` };
 }
 
 function orList(names: string[]): string {

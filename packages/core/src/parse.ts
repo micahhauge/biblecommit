@@ -1,4 +1,4 @@
-import { findBook } from './book-names';
+import { findBook, type BookLookup } from './book-names';
 import { getBook, getChapter, verseRef, type Book } from './canon';
 import { addDays, dayLabel } from './dates';
 
@@ -65,7 +65,7 @@ export function parse(text: string, { today, readOn }: ParseOptions): ParseResul
   const segments = ranges.flatMap(splitByBook);
   const display = displaySegments(segments);
   const verseCount = ranges.reduce((n, r) => n + r.end - r.start + 1, 0);
-  const summary = `${display} · ${verseCount} ${verseCount === 1 ? 'verse' : 'verses'} · ${dayLabel(date, today)}`;
+  const summary = `${display} · ${plural(verseCount, 'verse')} · ${dayLabel(date, today)}`;
   return { ok: true, segments, ranges, display, verseCount, readOn: date, summary };
 }
 
@@ -151,7 +151,7 @@ const FILLER = new Set([
 
 const ROMAN: Record<string, number> = { i: 1, ii: 2, iii: 3 };
 
-type BookRead = { ok: true; book: Book; next: number } | Failure;
+type BookRead = { ok: true; book: Book; next: number } | (BookLookup & { ok: false });
 
 /** Reads a book name starting at token i: an optional 1/2/3 or i/ii/iii, then up to four words. */
 function readBook(tokens: Token[], i: number): BookRead | undefined {
@@ -181,12 +181,17 @@ type Ref = { chapter: number; verse?: number };
 function readPassage(tokens: Token[]): { ok: true; ranges: VerseRange[] } | Failure {
   const ranges: VerseRange[] = [];
   let book: Book | undefined;
-  let bookHasRefs = false;
+  // References read for `book`, and whether the only one was a bare 1.
+  let refs = 0;
+  let bareOne = false;
   // What a bare number in a list means: a chapter, or a verse in `chapter`.
   let level: 'chapter' | 'verse' = 'chapter';
   let chapter = 1;
 
-  const wholeBook = (b: Book) => ranges.push({ start: b.firstVerseId, end: b.lastVerseId });
+  /** No numbers, or a lone bare 1 in a single-chapter book, means the whole book. */
+  const closeBook = () => {
+    if (book && (refs === 0 || (refs === 1 && bareOne))) ranges.push({ start: book.firstVerseId, end: book.lastVerseId });
+  };
   const resetLevel = (b: Book) => {
     // Single-chapter books take verse numbers.
     level = b.chapterCount === 1 ? 'verse' : 'chapter';
@@ -198,9 +203,9 @@ function readPassage(tokens: Token[]): { ok: true; ranges: VerseRange[] } | Fail
     const t = tokens[i]!;
     const named = readBook(tokens, i);
     if (named?.ok) {
-      if (book && !bookHasRefs) wholeBook(book);
+      closeBook();
       book = named.book;
-      bookHasRefs = false;
+      refs = 0;
       resetLevel(book);
       i = named.next;
       continue;
@@ -212,7 +217,7 @@ function readPassage(tokens: Token[]): { ok: true; ranges: VerseRange[] } | Fail
         continue;
       }
       // Before any book, an unknown word is most likely a misspelled book; after one, it's just unreadable.
-      if (named && (!book || !named.error.startsWith('unknown book'))) return named;
+      if (named && (!book || named.reason === 'ambiguous')) return fail(named.error);
       return fail(`couldn’t read “${t.text}”`);
     }
 
@@ -230,9 +235,10 @@ function readPassage(tokens: Token[]): { ok: true; ranges: VerseRange[] } | Fail
 
     // start: c:v, or a bare number at the current level
     let start: Ref;
-    if (isPunct(tokens[i + 1], ':')) {
+    const explicit = isPunct(tokens[i + 1], ':');
+    if (explicit) {
       const v = tokens[i + 2];
-      if (!isNum(v)) return fail(`couldn’t read “${tokens[i + 1]!.text}”`);
+      if (!isNum(v)) return fail('couldn’t read “:”');
       start = { chapter: t.n, verse: v.n };
       i += 3;
     } else {
@@ -247,7 +253,7 @@ function readPassage(tokens: Token[]): { ok: true; ranges: VerseRange[] } | Fail
       if (!isNum(a)) return fail('couldn’t read “-”');
       if (isPunct(tokens[i + 2], ':')) {
         const v = tokens[i + 3];
-        if (!isNum(v)) return fail(`couldn’t read “:”`);
+        if (!isNum(v)) return fail('couldn’t read “:”');
         end = { chapter: a.n, verse: v.n };
         i += 4;
       } else {
@@ -256,12 +262,8 @@ function readPassage(tokens: Token[]): { ok: true; ranges: VerseRange[] } | Fail
       }
     }
 
-    bookHasRefs = true;
-    // A bare 1 in a single-chapter book is the whole book.
-    if (book.chapterCount === 1 && start === end && start.verse !== undefined && t.n === 1 && !isPunct(tokens[i - 2], ':')) {
-      wholeBook(book);
-      continue;
-    }
+    refs++;
+    bareOne = book.chapterCount === 1 && !explicit && start === end && t.n === 1;
     const range = toRange(book, start, end);
     if (!range.ok) return range;
     ranges.push(range.range);
@@ -270,7 +272,7 @@ function readPassage(tokens: Token[]): { ok: true; ranges: VerseRange[] } | Fail
   }
 
   if (!book) return fail('which passage?');
-  if (!bookHasRefs) wholeBook(book);
+  closeBook();
   return { ok: true, ranges };
 }
 
@@ -349,16 +351,16 @@ function displayBook(segments: Segment[]): string {
   segments.forEach((s, i) => {
     // After a verse, a bare number reads as a verse, so a whole chapter needs `;`.
     if (i > 0) text += isWholeChapters(s) && !isWholeChapters(segments[i - 1]!) ? '; ' : ', ';
-    text += displayRefs(book, s);
+    text += displayRefs(book, s, segments.length === 1);
   });
   return text;
 }
 
-function displayRefs(book: Book, s: Segment): string {
+function displayRefs(book: Book, s: Segment, alone: boolean): string {
   if (isWholeChapters(s)) return s.startChapter === s.endChapter ? `${s.startChapter}` : `${s.startChapter}–${s.endChapter}`;
   if (book.chapterCount === 1) {
-    // A bare "Jude 1" would mean the whole book.
-    if (s.startVerse === 1 && s.endVerse === 1) return '1:1';
+    // A lone "Jude 1" would mean the whole book.
+    if (alone && s.startVerse === 1 && s.endVerse === 1) return '1:1';
     return s.startVerse === s.endVerse ? `${s.startVerse}` : `${s.startVerse}–${s.endVerse}`;
   }
   const start = `${s.startChapter}:${s.startVerse}`;

@@ -182,6 +182,10 @@ describe('single-chapter books', () => {
     ['jude 2', 'Jude 2 · 1'],
     ['obadiah 3, 5', 'Obadiah 3, 5 · 2'],
     ['philemon 1:1-25', 'Philemon · 25'],
+    // in a list, 1 is a verse like any other number
+    ['jude 1, 3', 'Jude 1, 3 · 2'],
+    ['jude 3, 1', 'Jude 1, 3 · 2'],
+    ['jude 1; 3', 'Jude 1, 3 · 2'],
     ['jude 26', 'error: Jude has 25 verses'],
     ['jude 2:1', 'error: Jude has 1 chapter'],
   ])('%s → %s', (text, expected) => {

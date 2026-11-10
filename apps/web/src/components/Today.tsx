@@ -12,6 +12,9 @@ function today() {
   return localDate(new Date(), browserTimezone());
 }
 
+/** How long the commit animation (ink sinking, pigment bloom) runs. */
+const INK_MS = 1800;
+
 /** What the preview line shows after a commit, until the input is edited. */
 type Outcome = { kind: 'committed' } | { kind: 'failed'; message: string };
 
@@ -20,11 +23,15 @@ const finePointer = () => typeof matchMedia === 'function' && matchMedia('(hover
 export function Today() {
   const hasGuest = useHasGuest();
   const recent = useRecentCommits();
-  const commit = useCommit();
+  // The commit that just landed; its row in the recent list washes in.
+  const [freshId, setFreshId] = useState<string | null>(null);
+  const commit = useCommit({ onSaved: (c) => setFreshId(c.id) });
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
   const [lastCommitted, setLastCommitted] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // The text being committed, replayed as ink sinking into the page.
+  const [ink, setInk] = useState<{ key: number; text: string } | null>(null);
 
   const parsed = text.trim() ? parse(text, { today: today() }) : null;
   const isNew = !hasGuest || (recent.isSuccess && recent.data.length === 0);
@@ -58,6 +65,7 @@ export function Today() {
       },
     });
     setLastCommitted(raw);
+    setInk({ key: Date.now(), text: raw });
     setText('');
     setOutcome(null);
   }
@@ -78,9 +86,10 @@ export function Today() {
     <>
       <section className={styles.entry}>
         <div className={styles.inrow}>
+          {ink && <CommitInk key={ink.key} text={ink.text} onDone={() => setInk(null)} />}
           <input
             ref={inputRef}
-            className={styles.input}
+            className={ink ? `${styles.input} ${styles.inking}` : styles.input}
             aria-label="what did you read today?"
             placeholder="what did you read today?"
             autoComplete="off"
@@ -108,7 +117,12 @@ export function Today() {
           {outcome?.kind === 'failed' ? (
             <span className={styles.err}>? {outcome.message}</span>
           ) : outcome?.kind === 'committed' ? (
-            <span className={styles.done}>committed.</span>
+            <span className={styles.done}>
+              <svg className={styles.tick} viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2.5 8.8l3.6 3.4L13.5 4" />
+              </svg>
+              <span className={styles.doneText}>committed.</span>
+            </span>
           ) : parsed?.ok ? (
             <span className={styles.ok}>✓ {parsed.summary}</span>
           ) : parsed ? (
@@ -141,7 +155,7 @@ export function Today() {
           ) : (
             <ul aria-label="recent commits" className={styles.log}>
               {recent.data?.map((c) => (
-                <li key={c.id}>
+                <li key={c.id} className={c.id === freshId ? styles.fresh : undefined}>
                   <span className={styles.when}>{dayLabel(c.readOn, today())}</span>
                   <span className={styles.passage}>{c.display}</span>
                 </li>
@@ -151,5 +165,28 @@ export function Today() {
         </section>
       )}
     </>
+  );
+}
+
+/** The committed text dissolving into the paper over a spreading pigment bloom. Decorative only. */
+function CommitInk({ text, onDone }: { text: string; onDone: () => void }) {
+  // Typing re-renders Today with a new onDone; the timer should still run once from mount.
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => {
+    const t = setTimeout(() => done.current(), INK_MS);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className={styles.ink} aria-hidden="true">
+      <span className={styles.bloom} />
+      <span className={styles.ghost}>
+        {[...text.trim()].map((ch, i) => (
+          <span key={i} style={{ '--i': Math.min(i, 40) } as React.CSSProperties}>
+            {ch}
+          </span>
+        ))}
+      </span>
+    </div>
   );
 }

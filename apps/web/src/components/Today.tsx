@@ -36,7 +36,7 @@ export function Today() {
       setUndoable(c);
     },
   });
-  const remove = useDeleteCommit();
+  const deletion = useDeleteCommit();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
   const [lastCommitted, setLastCommitted] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export function Today() {
 
   function deleteCommit(id: string) {
     setUndoable((u) => (u?.id === id ? null : u));
-    remove.mutate(id, { onError: (e) => setOutcome({ kind: 'failed', message: e.message }) });
+    deletion.mutate(id, { onError: (e) => setOutcome({ kind: 'failed', message: e.message }) });
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {

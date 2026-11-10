@@ -109,7 +109,7 @@ export interface Deps {
    * Every read (the recent list and all derived views: streak, heatmap, canon) must
    * exclude commits whose `deleted_at` is set.
    */
-  deleteCommit(userId: string, id: string): Promise<boolean>;
+  deleteCommit(userId: string, id: string, deletedAt: Date): Promise<boolean>;
 }
 
 export interface Options {
@@ -316,7 +316,7 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
   app.openapi(deleteCommitRoute, async (c) => {
     const user = await caller(c);
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
-    const deleted = await deps.deleteCommit(user.id, c.req.valid('param').id);
+    const deleted = await deps.deleteCommit(user.id, c.req.valid('param').id, now());
     if (!deleted) return c.json({ error: 'no such commit' }, 404);
     return c.body(null, 204);
   });

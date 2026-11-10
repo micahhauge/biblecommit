@@ -37,8 +37,8 @@ async function createGuest(): Promise<string> {
   return data.token;
 }
 
-/** fetch rejects with a TypeError when the network fails; say so in words. */
-function offline(e: unknown, what: string) {
+/** fetch rejects with a TypeError when the network fails; turn that into a readable error. */
+function networkError(e: unknown, what: string) {
   return e instanceof TypeError ? new Error(`could not ${what}; check your connection`) : e;
 }
 
@@ -48,7 +48,7 @@ async function postCommit(text: string, token: string): Promise<Commit> {
     if (data) return data;
     throw new Error(error?.error ?? 'could not save that commit');
   } catch (e) {
-    throw offline(e, 'save that commit');
+    throw networkError(e, 'save that commit');
   }
 }
 
@@ -97,19 +97,40 @@ export function useDeleteCommit() {
         // Already gone counts as done.
         if (error && response.status !== 404) throw new Error(error.error);
       } catch (e) {
-        throw offline(e, 'delete that commit');
+        throw networkError(e, 'delete that commit');
       }
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: recentKey });
-      const previous = queryClient.getQueryData<Recent>(recentKey);
+      // Remember just this row and where it was, so a failure puts back only it and
+      // leaves other deletes or commits made in the meantime alone.
+      let removed: { page: number; index: number; commit: Commit } | undefined;
       queryClient.setQueryData<Recent>(recentKey, (data) =>
-        data && { ...data, pages: data.pages.map((p) => ({ ...p, commits: p.commits.filter((c) => c.id !== id) })) },
+        data && {
+          ...data,
+          pages: data.pages.map((p, page) => {
+            const index = p.commits.findIndex((c) => c.id === id);
+            if (index < 0) return p;
+            removed = { page, index, commit: p.commits[index]! };
+            return { ...p, commits: p.commits.filter((c) => c.id !== id) };
+          }),
+        },
       );
-      return { previous };
+      return { removed };
     },
     onError: (_e, _id, context) => {
-      if (context?.previous) queryClient.setQueryData(recentKey, context.previous);
+      const removed = context?.removed;
+      if (!removed) return;
+      queryClient.setQueryData<Recent>(recentKey, (data) =>
+        data && {
+          ...data,
+          pages: data.pages.map((p, page) =>
+            page === removed.page && !p.commits.some((c) => c.id === removed.commit.id)
+              ? { ...p, commits: [...p.commits.slice(0, removed.index), removed.commit, ...p.commits.slice(removed.index)] }
+              : p,
+          ),
+        },
+      );
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: recentKey }),
   });

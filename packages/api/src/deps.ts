@@ -68,10 +68,10 @@ export function createDbDeps(provided?: Db): Deps {
       return rows.map((r): Commit => ({ ...r, createdAt: r.createdAt.toISOString() }));
     },
 
-    async deleteCommit(userId, id) {
+    async deleteCommit(userId, id, deletedAt) {
       const rows = await db()
         .update(commits)
-        .set({ deletedAt: sql`now()` })
+        .set({ deletedAt })
         .where(and(eq(commits.id, id), eq(commits.userId, userId), isNull(commits.deletedAt)))
         .returning({ id: commits.id });
       return rows.length > 0;

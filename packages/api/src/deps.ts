@@ -42,7 +42,7 @@ export function createDbDeps(provided?: Db): Deps {
       return { id, readOn, rawInput, display, verseCount, createdAt: createdAt.toISOString() };
     },
 
-    async listCommits(userId, limit) {
+    async listCommits(userId, limit, after) {
       const rows = await db()
         .select({
           id: commits.id,
@@ -54,11 +54,27 @@ export function createDbDeps(provided?: Db): Deps {
         })
         .from(commits)
         .leftJoin(commitRanges, eq(commitRanges.commitId, commits.id))
-        .where(and(eq(commits.userId, userId), isNull(commits.deletedAt)))
+        .where(
+          and(
+            eq(commits.userId, userId),
+            isNull(commits.deletedAt),
+            after &&
+              sql`(${commits.readOn}, ${commits.createdAt}, ${commits.id}) < (${after.readOn}::date, ${after.createdAt}::timestamptz, ${after.id}::uuid)`,
+          ),
+        )
         .groupBy(commits.id)
-        .orderBy(desc(commits.readOn), desc(commits.createdAt))
+        .orderBy(desc(commits.readOn), desc(commits.createdAt), desc(commits.id))
         .limit(limit);
       return rows.map((r): Commit => ({ ...r, createdAt: r.createdAt.toISOString() }));
+    },
+
+    async deleteCommit(userId, id) {
+      const rows = await db()
+        .update(commits)
+        .set({ deletedAt: sql`now()` })
+        .where(and(eq(commits.id, id), eq(commits.userId, userId), isNull(commits.deletedAt)))
+        .returning({ id: commits.id });
+      return rows.length > 0;
     },
   };
 }

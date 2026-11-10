@@ -90,7 +90,7 @@
 .log li {
   list-style: none;
   display: grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: 110px 1fr auto;
   align-items: baseline;
   padding: 10px 0;
   border-bottom: 1px solid var(--hair);
@@ -102,6 +102,78 @@
 }
 .passage {
   font-size: 18px;
+}
+/* ×, the inline "delete? yes no", "load more", and the undo toast share the prototype's quiet mono buttons. */
+.x,
+.confirm,
+.more,
+.toast {
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: var(--dim);
+}
+.x {
+  padding: 4px 0 4px 12px;
+  color: var(--faint);
+}
+.x:hover,
+.x:focus-visible {
+  color: var(--ink);
+}
+.confirm {
+  display: inline-flex;
+  gap: 10px;
+  padding-left: 12px;
+}
+.confirm button {
+  color: var(--dim);
+}
+.confirm button:hover,
+.confirm button:focus-visible {
+  color: var(--ink);
+}
+.confirm button:first-of-type {
+  color: rgb(var(--pig));
+}
+.more {
+  margin-top: 14px;
+  padding: 4px 0;
+}
+.more:hover {
+  color: var(--ink);
+}
+.more:disabled {
+  color: var(--faint);
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 10;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  transform: translateX(-50%);
+  animation: toastIn 0.3s ease-out both;
+}
+.toast button {
+  color: rgb(var(--pig));
+}
+.toast button:hover,
+.toast button:focus-visible {
+  text-decoration: underline;
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
 }
 
 @media (max-width: 760px) {
@@ -115,7 +187,7 @@
     font-size: 13px;
   }
   .log li {
-    grid-template-columns: 92px 1fr;
+    grid-template-columns: 92px 1fr auto;
   }
   .passage {
     font-size: 17px;
@@ -334,7 +406,8 @@
   .doneText,
   .fresh,
   .fresh::before,
-  .fresh .passage {
+  .fresh .passage,
+  .toast {
     animation: none;
   }
 }

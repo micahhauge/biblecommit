@@ -65,14 +65,51 @@ export interface NewCommit {
   verseCount: number;
 }
 
+/** Where a commit sits in the recent-list order. */
+export interface CommitPosition {
+  readOn: string;
+  createdAt: string;
+  id: string;
+}
+
+const CursorPosition = z.tuple([z.iso.date(), z.iso.datetime(), z.string().uuid()]);
+
+/** Opaque to clients: base64url of the last commit's position. */
+function encodeCursor({ readOn, createdAt, id }: Commit): string {
+  // Plain ASCII, so btoa is safe; base64url keeps it query-string friendly.
+  return btoa(JSON.stringify([readOn, createdAt, id])).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeCursor(cursor: string): CommitPosition | undefined {
+  try {
+    const parsed = CursorPosition.safeParse(JSON.parse(atob(cursor.replace(/-/g, '+').replace(/_/g, '/'))));
+    if (!parsed.success) return undefined;
+    const [readOn, createdAt, id] = parsed.data;
+    return { readOn, createdAt, id };
+  } catch {
+    return undefined;
+  }
+}
+
 export interface Deps {
   getCanonTotals(): Promise<CanonTotals>;
   createGuest(guest: { tokenHash: string; timezone: string }): Promise<{ id: string }>;
   findUserByGuestTokenHash(tokenHash: string): Promise<User | undefined>;
   /** Stores a commit and its verse ranges atomically. */
   createCommit(commit: NewCommit): Promise<Commit>;
-  /** The user's most recent non-deleted commits: latest `readOn` first, then latest created. */
-  listCommits(userId: string, limit: number): Promise<Commit[]>;
+  /**
+   * The user's non-deleted commits: latest `readOn` first, then latest created, then by id.
+   * With `after`, only commits strictly after that position in this order.
+   */
+  listCommits(userId: string, limit: number, after?: CommitPosition): Promise<Commit[]>;
+  /**
+   * Soft-deletes one of the user's commits by setting `deleted_at`. Returns false if the
+   * commit doesn't exist, isn't theirs, or is already deleted.
+   *
+   * Every read (the recent list and all derived views: streak, heatmap, canon) must
+   * exclude commits whose `deleted_at` is set.
+   */
+  deleteCommit(userId: string, id: string): Promise<boolean>;
 }
 
 export interface Options {
@@ -169,11 +206,40 @@ const createCommitRoute = createRoute({
 const listCommitsRoute = createRoute({
   method: 'get',
   path: '/commits',
-  summary: 'Recent commits, newest first',
+  summary: 'Recent commits, newest first, a page at a time',
   security: [{ guest: [] }],
+  request: {
+    query: z.object({
+      cursor: z.string().optional().openapi({ description: '`nextCursor` from the previous page; omit for the first page' }),
+    }),
+  },
   responses: {
-    200: json(z.object({ commits: z.array(Commit) }).openapi('CommitList'), 'Recent commits'),
+    200: json(
+      z
+        .object({
+          commits: z.array(Commit),
+          /** Pass as `cursor` to get the next page; null on the last page. */
+          nextCursor: z.string().nullable(),
+        })
+        .openapi('CommitList'),
+      'Recent commits',
+    ),
+    400: json(ErrorBody, 'Malformed cursor'),
     401: unauthorized,
+  },
+});
+
+const deleteCommitRoute = createRoute({
+  method: 'delete',
+  path: '/commits/{id}',
+  summary: 'Delete a commit (soft). Powers undo and the delete in the recent list.',
+  security: [{ guest: [] }],
+  request: { params: z.object({ id: z.string().uuid() }) },
+  responses: {
+    204: { description: 'Deleted' },
+    400: json(ErrorBody, 'Invalid id'),
+    401: unauthorized,
+    404: json(ErrorBody, 'No such commit for this user, or already deleted'),
   },
 });
 
@@ -237,7 +303,22 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
   app.openapi(listCommitsRoute, async (c) => {
     const user = await caller(c);
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
-    return c.json({ commits: await deps.listCommits(user.id, RECENT_LIMIT) }, 200);
+    const { cursor } = c.req.valid('query');
+    const after = cursor === undefined ? undefined : decodeCursor(cursor);
+    if (cursor !== undefined && !after) return c.json({ error: 'malformed cursor' }, 400);
+    // One extra tells us whether there's another page.
+    const rows = await deps.listCommits(user.id, RECENT_LIMIT + 1, after);
+    const commits = rows.slice(0, RECENT_LIMIT);
+    const nextCursor = rows.length > RECENT_LIMIT ? encodeCursor(commits.at(-1)!) : null;
+    return c.json({ commits, nextCursor }, 200);
+  });
+
+  app.openapi(deleteCommitRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const deleted = await deps.deleteCommit(user.id, c.req.valid('param').id);
+    if (!deleted) return c.json({ error: 'no such commit' }, 404);
+    return c.body(null, 204);
   });
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'guest', {

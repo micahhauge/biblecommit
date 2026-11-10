@@ -203,7 +203,83 @@ describe('GET /api/commits', () => {
     expect(commits[0]).toMatchObject({ display: 'Genesis 12' });
   });
 
+  it('pages through everything with a cursor, without skipping or repeating', async () => {
+    const auth = await newGuest();
+    const expected: string[] = [];
+    // Several share a readOn and a createdAt, so the cursor has to break ties.
+    for (let c = 1; c <= 23; c++) {
+      if (c % 3 === 0) now = new Date(now.getTime() + 1000);
+      await post('/api/commits', { text: `gen ${c}`, readOn: c % 2 ? '2026-11-01' : '2026-11-05' }, auth);
+    }
+    for (let c = 23; c >= 1; c--) if (c % 2 === 0) expected.push(`Genesis ${c}`);
+    for (let c = 23; c >= 1; c--) if (c % 2) expected.push(`Genesis ${c}`);
+
+    const seen: string[] = [];
+    const sizes: number[] = [];
+    let cursor: string | null = null;
+    do {
+      const res = await app.request(`/api/commits${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { headers: auth });
+      expect(res.status).toBe(200);
+      const page = (await res.json()) as { commits: Array<{ display: string }>; nextCursor: string | null };
+      sizes.push(page.commits.length);
+      seen.push(...page.commits.map((c) => c.display));
+      cursor = page.nextCursor;
+    } while (cursor);
+
+    expect(sizes).toEqual([10, 10, 3]);
+    // Same readOn and createdAt can come back in any stable order; compare as sets per day.
+    expect(seen.slice(0, 11).sort()).toEqual(expected.slice(0, 11).sort());
+    expect(seen.slice(11).sort()).toEqual(expected.slice(11).sort());
+    expect(new Set(seen).size).toBe(23);
+  });
+
+  it('has no next cursor when everything fits on one page', async () => {
+    const auth = await newGuest();
+    await post('/api/commits', { text: 'gen 1' }, auth);
+    const res = await app.request('/api/commits', { headers: auth });
+    expect(await res.json()).toMatchObject({ nextCursor: null });
+  });
+
+  it('rejects a malformed cursor', async () => {
+    const auth = await newGuest();
+    expect((await app.request('/api/commits?cursor=garbage', { headers: auth })).status).toBe(400);
+  });
+
   it('requires a valid guest token', async () => {
     expect((await app.request('/api/commits')).status).toBe(401);
+  });
+});
+
+describe('DELETE /api/commits/:id', () => {
+  function del(id: string, auth: Record<string, string> = {}) {
+    return app.request(`/api/commits/${id}`, { method: 'DELETE', headers: auth });
+  }
+
+  it('deletes the caller\'s commit so it leaves the list', async () => {
+    const auth = await newGuest();
+    const { id } = await (await post('/api/commits', { text: 'gen 1' }, auth)).json();
+    await post('/api/commits', { text: 'gen 2' }, auth);
+
+    expect((await del(id, auth)).status).toBe(204);
+    expect((await list(auth)).map((c) => c.display)).toEqual(['Genesis 2']);
+  });
+
+  it('only deletes the caller\'s own commits', async () => {
+    const auth = await newGuest();
+    const other = await newGuest();
+    const { id } = await (await post('/api/commits', { text: 'gen 1' }, auth)).json();
+
+    expect((await del(id, other)).status).toBe(404);
+    expect((await del(id)).status).toBe(401);
+    expect((await list(auth)).map((c) => c.display)).toEqual(['Genesis 1']);
+  });
+
+  it('404s on a commit that is already deleted or never existed', async () => {
+    const auth = await newGuest();
+    const { id } = await (await post('/api/commits', { text: 'gen 1' }, auth)).json();
+    expect((await del(id, auth)).status).toBe(204);
+    expect((await del(id, auth)).status).toBe(404);
+    expect((await del(crypto.randomUUID(), auth)).status).toBe(404);
+    expect((await del('not-a-uuid', auth)).status).toBe(400);
   });
 });

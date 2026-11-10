@@ -2,7 +2,7 @@
 
 import { dayLabel, localDate, parse } from '@biblecommit/core';
 import { useEffect, useRef, useState } from 'react';
-import { useCommit, useRecentCommits } from '@/commits';
+import { useCommit, useDeleteCommit, useRecentCommits, type Commit } from '@/commits';
 import { browserTimezone, useHasGuest } from '@/guest';
 import styles from './Today.module.css';
 
@@ -15,6 +15,9 @@ function today() {
 /** How long the commit animation (ink sinking, pigment bloom) runs. */
 const INK_MS = 1800;
 
+/** How long "undo" stays up after a commit (unless another commit replaces it). */
+const UNDO_MS = 6000;
+
 /** What the preview line shows after a commit, until the input is edited. */
 type Outcome = { kind: 'committed' } | { kind: 'failed'; message: string };
 
@@ -25,7 +28,15 @@ export function Today() {
   const recent = useRecentCommits();
   // The commit that just landed; its row in the recent list washes in.
   const [freshId, setFreshId] = useState<string | null>(null);
-  const commit = useCommit({ onSaved: (c) => setFreshId(c.id) });
+  // The latest commit, while it can still be undone.
+  const [undoable, setUndoable] = useState<Commit | null>(null);
+  const commit = useCommit({
+    onSaved: (c) => {
+      setFreshId(c.id);
+      setUndoable(c);
+    },
+  });
+  const remove = useDeleteCommit();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState('');
   const [lastCommitted, setLastCommitted] = useState<string | null>(null);
@@ -57,6 +68,7 @@ export function Today() {
   function submit() {
     if (!parsed?.ok || commit.isPending) return;
     const raw = text;
+    setUndoable(null);
     commit.mutate(raw, {
       onSuccess: () => setOutcome({ kind: 'committed' }),
       onError: (e) => {
@@ -68,6 +80,11 @@ export function Today() {
     setInk({ key: Date.now(), text: raw });
     setText('');
     setOutcome(null);
+  }
+
+  function deleteCommit(id: string) {
+    setUndoable((u) => (u?.id === id ? null : u));
+    remove.mutate(id, { onError: (e) => setOutcome({ kind: 'failed', message: e.message }) });
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -147,6 +164,8 @@ export function Today() {
         )}
       </section>
 
+      {undoable && <UndoToast key={undoable.id} commit={undoable} onUndo={() => deleteCommit(undoable.id)} onExpire={() => setUndoable(null)} />}
+
       {!isNew && (
         <section>
           <h2>recent commits</h2>
@@ -155,16 +174,64 @@ export function Today() {
           ) : (
             <ul aria-label="recent commits" className={styles.log}>
               {recent.data?.map((c) => (
-                <li key={c.id} className={c.id === freshId ? styles.fresh : undefined}>
-                  <span className={styles.when}>{dayLabel(c.readOn, today())}</span>
-                  <span className={styles.passage}>{c.display}</span>
-                </li>
+                <CommitRow key={c.id} commit={c} fresh={c.id === freshId} onDelete={() => deleteCommit(c.id)} />
               ))}
             </ul>
+          )}
+          {recent.hasNextPage && (
+            <button type="button" className={styles.more} disabled={recent.isFetchingNextPage} onClick={() => recent.fetchNextPage()}>
+              {recent.isFetchingNextPage ? 'loading…' : 'load more'}
+            </button>
           )}
         </section>
       )}
     </>
+  );
+}
+
+/** "John 3 committed · undo", for UNDO_MS after a commit. Remount (new key) to restart the clock. */
+function UndoToast({ commit, onUndo, onExpire }: { commit: Commit; onUndo: () => void; onExpire: () => void }) {
+  const expire = useRef(onExpire);
+  expire.current = onExpire;
+  useEffect(() => {
+    const t = setTimeout(() => expire.current(), UNDO_MS);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className={styles.toast} aria-live="polite">
+      <span>{commit.display} committed</span>
+      <button type="button" onClick={onUndo}>
+        undo
+      </button>
+    </div>
+  );
+}
+
+/** One recent commit. × asks "delete?" in place; only "yes" deletes. */
+function CommitRow({ commit, fresh, onDelete }: { commit: Commit; fresh: boolean; onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <li className={fresh ? styles.fresh : undefined}>
+      <span className={styles.when}>{dayLabel(commit.readOn, today())}</span>
+      <span className={styles.passage} data-testid="passage">
+        {commit.display}
+      </span>
+      {confirming ? (
+        <span className={styles.confirm}>
+          delete?
+          <button type="button" onClick={onDelete}>
+            yes
+          </button>
+          <button type="button" autoFocus onClick={() => setConfirming(false)}>
+            no
+          </button>
+        </span>
+      ) : (
+        <button type="button" className={styles.x} aria-label={`delete ${commit.display}`} onClick={() => setConfirming(true)}>
+          ×
+        </button>
+      )}
+    </li>
   );
 }
 

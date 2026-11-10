@@ -40,6 +40,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/guests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a guest user. Called once, right before the first commit. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Browser timezone */
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example America/Chicago */
+                        timezone: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The guest token. Send it as `Authorization: Guest <token>`; it cannot be recovered. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["GuestToken"];
+                    };
+                };
+                /** @description Invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/commits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent commits, newest first */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recent commits */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CommitList"];
+                    };
+                };
+                /** @description Missing or unknown credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Commit a reading. The server re-parses the text. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description What was read */
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example john 3 */
+                        text: string;
+                        /** Format: date */
+                        readOn?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The created commit */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Commit"];
+                    };
+                };
+                /** @description Invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or unknown credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description The text could not be parsed, or the date is in the future */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -48,6 +203,26 @@ export interface components {
             books: number;
             chapters: number;
             verses: number;
+        };
+        GuestToken: {
+            token: string;
+        };
+        Error: {
+            error: string;
+        };
+        Commit: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date */
+            readOn: string;
+            rawInput: string;
+            display: string;
+            verseCount: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CommitList: {
+            commits: components["schemas"]["Commit"][];
         };
     };
     responses: never;

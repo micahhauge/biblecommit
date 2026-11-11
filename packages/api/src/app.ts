@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { bucketThresholds, isTimezone, localDate, parse, streak, weekOf, yearDays, YEAR_DAYS, type VerseRange } from '@biblecommit/core';
+import { bucketThresholds, chapterReads, coverage, isTimezone, localDate, parse, streak, weekOf, TOTAL_CHAPTERS, yearDays, YEAR_DAYS, type VerseRange } from '@biblecommit/core';
 import type { Context } from 'hono';
 import { hashGuestToken, newGuestToken } from './guest-token';
 
@@ -102,6 +102,31 @@ export const Year = z
   })
   .openapi('Year');
 
+export const Canon = z
+  .object({
+    /**
+     * One entry per chapter (1,189), in canonical order: index `i` is chapter ID `i + 1`.
+     * All time, deleted commits excluded.
+     */
+    chapters: z
+      .array(
+        z.object({
+          /** Times the whole chapter has been read: the fewest reads of any of its verses (repeats count). */
+          times: z.number().int(),
+          /** Distinct verses read at least once. A chapter with `times` 0 and some verses read is partly read. */
+          versesRead: z.number().int(),
+        }),
+      )
+      .length(TOTAL_CHAPTERS),
+    /** Chapters with every verse read at least once. */
+    chaptersRead: z.number().int(),
+    /** Chapters read through at least twice. */
+    readMoreThanOnce: z.number().int(),
+    /** `chaptersRead` ÷ 1,189, from 0 to 1. */
+    coverage: z.number(),
+  })
+  .openapi('Canon');
+
 export interface NewCommit {
   id: string;
   userId: string;
@@ -156,6 +181,8 @@ export interface Deps {
   listReadDays(userId: string): Promise<string[]>;
   /** Verses read per local date from `from` to `to` inclusive, repeats counted; days with none are left out. */
   dailyVerses(userId: string, from: string, to: string): Promise<Array<{ readOn: string; verses: number }>>;
+  /** Every verse range in the user's non-deleted commits, all time. */
+  listReadRanges(userId: string): Promise<VerseRange[]>;
   updateUser(userId: string, changes: { timezone?: string }): Promise<void>;
   /**
    * Soft-deletes one of the user's commits by setting `deleted_at`. Returns false if the
@@ -337,6 +364,14 @@ const yearRoute = createRoute({
   responses: { 200: json(Year, 'The year'), 400: json(ErrorBody, 'Invalid end date'), 401: unauthorized },
 });
 
+const canonRoute = createRoute({
+  method: 'get',
+  path: '/me/canon',
+  summary: 'How much of the canon the caller has read: per-chapter reads and coverage',
+  security: [{ guest: [] }],
+  responses: { 200: json(Canon, 'The canon'), 401: unauthorized },
+});
+
 export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) {
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
@@ -449,6 +484,13 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
     const verses = new Map(rows.map((r) => [r.readOn, r.verses]));
     const days = dates.map((date) => ({ date, verses: verses.get(date) ?? 0 }));
     return c.json({ today, days, thresholds: bucketThresholds(verses.values()) }, 200);
+  });
+
+  app.openapi(canonRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const chapters = chapterReads(await deps.listReadRanges(user.id));
+    return c.json({ chapters, ...coverage(chapters) }, 200);
   });
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'guest', {

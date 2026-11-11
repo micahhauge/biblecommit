@@ -1,0 +1,92 @@
+/* Ported from prototype/index.html (.covrow, .big, .sub, #canonRows, cells). #wash is defined in app/layout.tsx. */
+.covrow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 28px 0 44px;
+  flex-wrap: wrap;
+}
+.big {
+  font-size: 68px;
+  line-height: 0.9;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.sub {
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 12px;
+  letter-spacing: 0.04em;
+  line-height: 1.7;
+}
+.right {
+  text-align: right;
+}
+
+.grid svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.bk {
+  font-family: var(--serif), serif;
+  fill: var(--dim);
+}
+.sec {
+  font-family: var(--mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  fill: var(--faint);
+}
+
+.cells {
+  filter: url(#wash);
+}
+.c {
+  transition: fill 0.5s;
+}
+/* 0 unread · 1 partly read · 2 read 1× · 3 read 2× · 4 read 3+ */
+.l0 {
+  fill: color-mix(in srgb, var(--ink) var(--empty), transparent);
+}
+.l1 {
+  fill: rgb(var(--pig) / 0.22);
+}
+.l2 {
+  fill: rgb(var(--pig) / 0.42);
+}
+.l3 {
+  fill: rgb(var(--pig) / 0.66);
+}
+.l4 {
+  fill: rgb(var(--pig) / 0.92);
+}
+.c:not(.l0) {
+  stroke: rgb(var(--pig) / 0.32);
+  stroke-width: 0.9;
+}
+@media (hover: hover) {
+  .c:hover {
+    stroke: var(--ink);
+    stroke-width: 1;
+  }
+}
+
+.status {
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+  margin-top: 10px;
+  min-height: 1.5em;
+}
+
+@media (max-width: 760px) {
+  .big {
+    font-size: 60px;
+  }
+}

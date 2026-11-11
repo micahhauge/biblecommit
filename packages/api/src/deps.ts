@@ -89,6 +89,14 @@ export function createDbDeps(provided?: Db): Deps {
         .groupBy(commits.readOn);
     },
 
+    async listReadRanges(userId) {
+      return db()
+        .select({ start: commitRanges.startVerseId, end: commitRanges.endVerseId })
+        .from(commitRanges)
+        .innerJoin(commits, eq(commits.id, commitRanges.commitId))
+        .where(and(eq(commits.userId, userId), isNull(commits.deletedAt)));
+    },
+
     async updateUser(userId, { timezone }) {
       if (timezone === undefined) return;
       await db().update(users).set({ timezone }).where(eq(users.id, userId));

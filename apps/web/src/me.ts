@@ -8,16 +8,19 @@ import { browserTimezone, useHasGuest } from '@/guest';
 
 export type TodaySummary = components['schemas']['TodaySummary'];
 export type Year = components['schemas']['Year'];
+export type Canon = components['schemas']['Canon'];
 
 export const meKey = ['me'] as const;
 /** Streak, this week, and today's commits. */
 export const todayKey = ['me', 'today'] as const;
 /** The year heatmap. */
 export const yearKey = ['me', 'year'] as const;
+/** Per-chapter reads and coverage. */
+export const canonKey = ['me', 'canon'] as const;
 
-/** Refetches everything derived from the user's commits (streak, week, heatmap). Call after anything that adds or removes a commit. */
+/** Refetches everything derived from the user's commits (streak, week, heatmap, canon). Call after anything that adds or removes a commit. */
 export function invalidateReading(queryClient: QueryClient) {
-  return Promise.all([queryClient.invalidateQueries({ queryKey: todayKey }), queryClient.invalidateQueries({ queryKey: yearKey })]);
+  return Promise.all([todayKey, yearKey, canonKey].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }
 
 /** Streak and this week. Never fetches until this browser has a guest (or account). */
@@ -43,6 +46,20 @@ export function useYear() {
     queryFn: async () => {
       const { data, error } = await api.GET('/api/me/year');
       if (error || !data) throw new Error('could not load your year');
+      return data;
+    },
+  });
+}
+
+/** How much of the canon has been read. Never fetches until this browser has a guest (or account). */
+export function useCanon() {
+  const hasGuest = useHasGuest();
+  return useQuery({
+    queryKey: canonKey,
+    enabled: hasGuest,
+    queryFn: async () => {
+      const { data, error } = await api.GET('/api/me/canon');
+      if (error || !data) throw new Error('could not load your canon');
       return data;
     },
   });

@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { bucketThresholds, chapterReads, coverage, isTimezone, localDate, parse, streak, weekOf, TOTAL_CHAPTERS, yearDays, YEAR_DAYS, type VerseRange } from '@biblecommit/core';
+import { BOOKS, bucketThresholds, chapterReads, coverage, getBook, isTimezone, localDate, parse, streak, weekOf, TOTAL_CHAPTERS, verseReads, yearDays, YEAR_DAYS, type VerseRange } from '@biblecommit/core';
 import type { Context } from 'hono';
 import { hashGuestToken, newGuestToken } from './guest-token';
 
@@ -127,6 +127,20 @@ export const Canon = z
   })
   .openapi('Canon');
 
+export const BookReads = z
+  .object({
+    /** 1..66 in canonical order. */
+    bookId: z.number().int(),
+    /** One entry per chapter of the book, in order: index `c` is chapter `c + 1`. All time, deleted commits excluded. */
+    chapters: z.array(
+      z.object({
+        /** Read count of each verse (repeats count): index `v` is verse `v + 1`. */
+        verses: z.array(z.number().int()),
+      }),
+    ),
+  })
+  .openapi('BookReads');
+
 export interface NewCommit {
   id: string;
   userId: string;
@@ -181,8 +195,8 @@ export interface Deps {
   listReadDays(userId: string): Promise<string[]>;
   /** Verses read per local date from `from` to `to` inclusive, repeats counted; days with none are left out. */
   dailyVerses(userId: string, from: string, to: string): Promise<Array<{ readOn: string; verses: number }>>;
-  /** Every verse range in the user's non-deleted commits, all time. */
-  listReadRanges(userId: string): Promise<VerseRange[]>;
+  /** Every verse range in the user's non-deleted commits, all time; only those overlapping `within`, if given. */
+  listReadRanges(userId: string, within?: VerseRange): Promise<VerseRange[]>;
   updateUser(userId: string, changes: { timezone?: string }): Promise<void>;
   /**
    * Soft-deletes one of the user's commits by setting `deleted_at`. Returns false if the
@@ -372,6 +386,24 @@ const canonRoute = createRoute({
   responses: { 200: json(Canon, 'The canon'), 401: unauthorized },
 });
 
+const bookReadsRoute = createRoute({
+  method: 'get',
+  path: '/me/canon/{bookId}',
+  summary: 'How often the caller has read each verse of one book',
+  security: [{ guest: [] }],
+  request: {
+    params: z.object({
+      bookId: z.coerce
+        .number({ message: 'bookId must be a number from 1 to 66' })
+        .int({ message: 'bookId must be a number from 1 to 66' })
+        .min(1, { message: 'bookId must be a number from 1 to 66' })
+        .max(BOOKS.length, { message: 'bookId must be a number from 1 to 66' })
+        .openapi({ param: { name: 'bookId', in: 'path' }, example: 1 }),
+    }),
+  },
+  responses: { 200: json(BookReads, 'The book'), 400: json(ErrorBody, 'Invalid book'), 401: unauthorized },
+});
+
 export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) {
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
@@ -491,6 +523,15 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
     const chapters = chapterReads(await deps.listReadRanges(user.id));
     return c.json({ chapters, ...coverage(chapters) }, 200);
+  });
+
+  app.openapi(bookReadsRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const { bookId } = c.req.valid('param');
+    const book = getBook(bookId)!;
+    const ranges = await deps.listReadRanges(user.id, { start: book.firstVerseId, end: book.lastVerseId });
+    return c.json({ bookId, chapters: verseReads(ranges, bookId).map((verses) => ({ verses })) }, 200);
   });
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'guest', {

@@ -589,6 +589,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/canon/{bookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How often the caller has read each verse of one book */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bookId: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The book */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BookReads"];
+                    };
+                };
+                /** @description Invalid book */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or unknown credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -675,6 +731,12 @@ export interface components {
             chaptersRead: number;
             readMoreThanOnce: number;
             coverage: number;
+        };
+        BookReads: {
+            bookId: number;
+            chapters: {
+                verses: number[];
+            }[];
         };
     };
     responses: never;

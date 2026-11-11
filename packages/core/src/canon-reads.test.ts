@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getChapter, TOTAL_CHAPTERS } from './canon';
-import { chapterLabel, chapterLevel, chapterReads, coverage, readLabel } from './canon-reads';
+import { chapterLabel, chapterLevel, chapterReads, coverage, readLabel, verseLabel, verseReads } from './canon-reads';
 import { parse } from './parse';
 
 /** The verse ranges a reading parses to. */
@@ -74,5 +74,42 @@ describe('coverage', () => {
   it('is chapters read through at least once, out of 1,189', () => {
     const c = coverage(chapterReads(ranges('john 3', 'john 3', 'gen 1-2', 'ps 23:1')));
     expect(c).toEqual({ chaptersRead: 3, readMoreThanOnce: 1, coverage: 3 / 1189 });
+  });
+});
+
+describe('verseReads', () => {
+  it('is every verse of the book, unread, with nothing read', () => {
+    const reads = verseReads([], 8); // Ruth: 22, 23, 18, 22 verses
+    expect(reads.map((c) => c.length)).toEqual([22, 23, 18, 22]);
+    expect(reads.flat().every((n) => n === 0)).toBe(true);
+  });
+
+  it('counts each verse, with repeats across commits', () => {
+    const reads = verseReads(ranges('gen 1', 'gen 1:3-5', 'gen 1:5-2:2'), 1);
+    expect(reads).toHaveLength(50);
+    expect(reads[0]!.slice(0, 6)).toEqual([1, 1, 2, 2, 3, 2]);
+    expect(reads[0]!.at(-1)).toBe(2);
+    expect(reads[1]!.slice(0, 3)).toEqual([1, 1, 0]);
+    expect(reads[2]!.every((n) => n === 0)).toBe(true);
+  });
+
+  it('ignores ranges outside the book and clips ranges that cross into it', () => {
+    const reads = verseReads(ranges('mal 4', 'mat 1:1-3', 'mark 1', 'gen 1-50'), 40);
+    expect(reads[0]!.slice(0, 4)).toEqual([1, 1, 1, 0]);
+    expect(reads.flat().reduce((a, b) => a + b)).toBe(3);
+    expect(verseReads([{ start: 1, end: 31102 }], 40).flat().every((n) => n === 1)).toBe(true);
+  });
+
+  it('is empty for an unknown book', () => {
+    expect(verseReads(ranges('gen 1'), 0)).toEqual([]);
+    expect(verseReads(ranges('gen 1'), 67)).toEqual([]);
+  });
+});
+
+describe('verseLabel', () => {
+  it('names a verse', () => {
+    expect(verseLabel(1, 12, 3)).toBe('Genesis 12:3');
+    expect(verseLabel(19, 23, 1)).toBe('Psalm 23:1');
+    expect(verseLabel(65, 1, 3)).toBe('Jude 3');
   });
 });

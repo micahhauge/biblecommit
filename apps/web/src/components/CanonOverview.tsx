@@ -1,9 +1,11 @@
 'use client';
 
-import { BOOKS, CHAPTERS, chapterLabel, chapterLevel, chapterReads, coverage, readLabel, SECTIONS, TOTAL_CHAPTERS, type ChapterReads } from '@biblecommit/core';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { BOOKS, CHAPTERS, chapterLabel, getBook, getChapter, chapterLevel, chapterReads, coverage, readLabel, SECTIONS, TOTAL_CHAPTERS, type ChapterReads } from '@biblecommit/core';
+import { useRef, useState } from 'react';
 import { useHasGuest } from '@/guest';
 import { useCanon, type Canon } from '@/me';
+import { useWidth } from '@/use-width';
+import { BookSheet } from './BookSheet';
 import styles from './CanonOverview.module.css';
 
 /** Before the first commit: the whole canon, unread, without a request. */
@@ -39,17 +41,9 @@ export function CanonOverview() {
   const data = hasGuest ? canon.data : emptyCanon();
   const [active, setActive] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
-
-  useLayoutEffect(() => {
-    const el = box.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const measure = () => el.clientWidth && setWidth(el.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  const width = useWidth(box, DEFAULT_WIDTH);
+  /** The book open in the sheet, and the chapter to show first. */
+  const [open, setOpen] = useState<{ bookId: number; chapter: number | null } | null>(null);
 
   const chapters = data?.chapters ?? [];
   const { small, label, step, cell, perLine } = layout(width);
@@ -71,7 +65,23 @@ export function CanonOverview() {
       y += 10;
     }
     texts.push(
-      <text key={book.id} className={styles.bk} x={label - 10} y={y + cell - 0.5} textAnchor="end" style={{ fontSize: small ? 11 : 12.5 }}>
+      <text
+        key={book.id}
+        data-book={book.id}
+        role="button"
+        tabIndex={0}
+        aria-label={`open ${book.name}`}
+        className={styles.bk}
+        x={label - 10}
+        y={y + cell - 0.5}
+        textAnchor="end"
+        style={{ fontSize: small ? 11 : 12.5 }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          setOpen({ bookId: book.id, chapter: null });
+        }}
+      >
         {book.name}
       </text>,
     );
@@ -145,7 +155,13 @@ export function CanonOverview() {
             viewBox={`0 0 ${label + perLine * step} ${y}`}
             onMouseOver={(e) => setActive(chapterAt(e.target))}
             onMouseLeave={() => setActive(null)}
-            onClick={(e) => setActive(chapterAt(e.target))}
+            onClick={(e) => {
+              const i = chapterAt(e.target);
+              setActive(i);
+              if (i !== null) setOpen({ bookId: CHAPTERS[i]!.bookId, chapter: CHAPTERS[i]!.number });
+              const book = e.target instanceof Element ? e.target.getAttribute('data-book') : null;
+              if (book !== null) setOpen({ bookId: Number(book), chapter: null });
+            }}
           >
             {texts}
             <g className={styles.cells}>{cells}</g>
@@ -155,8 +171,23 @@ export function CanonOverview() {
       <p className={styles.status} data-testid="canon-status">
         {activeReads && active !== null ? describe(active, activeReads) : ' '}
       </p>
+      {open && (
+        <BookSheet
+          key={open.bookId}
+          bookId={open.bookId}
+          chapter={open.chapter}
+          chapters={bookChapters(chapters, open.bookId)}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </section>
   );
+}
+
+/** One book's slice of the per-chapter reads. */
+function bookChapters(chapters: readonly ChapterReads[], bookId: number) {
+  const first = getChapter(bookId, 1)!.id - 1;
+  return chapters.slice(first, first + getBook(bookId)!.chapterCount);
 }
 
 /** "Genesis 12 · read 2×" for the chapter at index `i` (chapter ID − 1). */

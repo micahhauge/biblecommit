@@ -490,3 +490,50 @@ describe('GET /api/me/canon', () => {
     expect((await app.request('/api/me/canon')).status).toBe(401);
   });
 });
+
+describe('GET /api/me/canon/:bookId', () => {
+  type BookReads = { bookId: number; chapters: Array<{ verses: number[] }> };
+  async function book(bookId: number | string, auth: Record<string, string>): Promise<BookReads> {
+    const res = await app.request(`/api/me/canon/${bookId}`, { headers: auth });
+    expect(res.status).toBe(200);
+    return res.json();
+  }
+
+  it('is every verse of the book, unread, for a new guest', async () => {
+    const body = await book(8, await newGuest()); // Ruth
+    expect(body.bookId).toBe(8);
+    expect(body.chapters.map((c) => c.verses.length)).toEqual([22, 23, 18, 22]);
+    expect(body.chapters.flatMap((c) => c.verses).every((n) => n === 0)).toBe(true);
+  });
+
+  it('counts reads of each verse all time, with repeats, and only within the book', async () => {
+    const auth = await newGuest();
+    await post('/api/commits', { text: 'ps 23' }, auth);
+    await post('/api/commits', { text: 'ps 23:1-3', readOn: '2024-01-01' }, auth);
+    await post('/api/commits', { text: 'job 42, ps 1-2:2, prov 1' }, auth);
+    const { chapters } = await book(19, auth);
+    expect(chapters).toHaveLength(150);
+    expect(chapters[22]!.verses).toEqual([2, 2, 2, 1, 1, 1]);
+    expect(chapters[0]!.verses.every((n) => n === 1)).toBe(true);
+    expect(chapters[1]!.verses.slice(0, 3)).toEqual([1, 1, 0]);
+    expect(chapters.flatMap((c) => c.verses).reduce((a, b) => a + b)).toBe(6 + 3 + 6 + 2);
+  });
+
+  it('leaves out deleted commits and other users\' commits', async () => {
+    const auth = await newGuest();
+    await post('/api/commits', { text: 'gen 1:1' }, await newGuest());
+    const { id } = await (await post('/api/commits', { text: 'gen 1:2' }, auth)).json();
+    expect((await book(1, auth)).chapters[0]!.verses.slice(0, 3)).toEqual([0, 1, 0]);
+    await app.request(`/api/commits/${id}`, { method: 'DELETE', headers: auth });
+    expect((await book(1, auth)).chapters[0]!.verses.slice(0, 3)).toEqual([0, 0, 0]);
+  });
+
+  it('rejects unknown books and requires a guest token', async () => {
+    const auth = await newGuest();
+    for (const bad of [0, 67, 'genesis', 1.5]) {
+      expect((await app.request(`/api/me/canon/${bad}`, { headers: auth })).status).toBe(400);
+    }
+    expect((await book(66, auth)).chapters).toHaveLength(22);
+    expect((await app.request('/api/me/canon/1')).status).toBe(401);
+  });
+});

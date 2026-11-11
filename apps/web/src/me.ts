@@ -9,14 +9,17 @@ import { browserTimezone, useHasGuest } from '@/guest';
 export type TodaySummary = components['schemas']['TodaySummary'];
 export type Year = components['schemas']['Year'];
 export type Canon = components['schemas']['Canon'];
+export type BookReads = components['schemas']['BookReads'];
 
 export const meKey = ['me'] as const;
 /** Streak, this week, and today's commits. */
 export const todayKey = ['me', 'today'] as const;
 /** The year heatmap. */
 export const yearKey = ['me', 'year'] as const;
-/** Per-chapter reads and coverage. */
+/** Per-chapter reads and coverage. Also the prefix of every book's verse reads, so invalidating it refreshes those too. */
 export const canonKey = ['me', 'canon'] as const;
+/** Per-verse reads of one book. */
+export const bookKey = (bookId: number) => [...canonKey, bookId] as const;
 
 /** Refetches everything derived from the user's commits (streak, week, heatmap, canon). Call after anything that adds or removes a commit. */
 export function invalidateReading(queryClient: QueryClient) {
@@ -104,4 +107,18 @@ export function useTimezoneSync() {
 export function TimezoneSync() {
   useTimezoneSync();
   return null;
+}
+
+/** How often each verse of one book has been read. Never fetches until this browser has a guest (or account). */
+export function useBookReads(bookId: number) {
+  const hasGuest = useHasGuest();
+  return useQuery({
+    queryKey: bookKey(bookId),
+    enabled: hasGuest,
+    queryFn: async () => {
+      const { data, error } = await api.GET('/api/me/canon/{bookId}', { params: { path: { bookId } } });
+      if (error || !data) throw new Error('could not load this book');
+      return data;
+    },
+  });
 }

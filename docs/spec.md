@@ -144,7 +144,7 @@ users
   clerk_user_id     text unique null   -- set once signed in / claimed
   guest_token_hash  text unique null   -- sha256 of guest token; raw token never stored
   timezone        text not null    -- IANA, e.g. America/Chicago
-  mode_pref       text default 'system'
+  mode_pref       text null        -- system | dark | light; null until chosen (the browser's mode is then stored)
   created_at      timestamptz
 
 books             (seeded) id smallint pk, name, short_name, section, chapter_count, first_verse_id, last_verse_id

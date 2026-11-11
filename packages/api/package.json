@@ -13,6 +13,7 @@
   "dependencies": {
     "@biblecommit/core": "workspace:*",
     "@biblecommit/db": "workspace:*",
+    "@clerk/backend": "^3.27.0",
     "@hono/zod-openapi": "^1.6.3",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.17",

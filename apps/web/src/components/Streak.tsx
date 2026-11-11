@@ -1,26 +1,28 @@
 'use client';
 
 import { localDate, weekOf } from '@biblecommit/core';
-import { browserTimezone, useHasGuest } from '@/guest';
+import { browserTimezone } from '@/guest';
+import { useHasUser } from '@/session';
 import { useToday } from '@/me';
+import { SaveNudge } from './SaveNudge';
 import styles from './Streak.module.css';
 
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 /** The streak number, today's status, and this week's dots (Sun–Sat). */
 export function Streak() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   const summary = useToday();
 
   // Before the first commit there is nothing to fetch: an empty week, locally.
-  const data = hasGuest
+  const data = hasUser
     ? summary.data
     : (() => {
         const today = localDate(new Date(), browserTimezone());
         return { today, streak: 0, committedToday: false, week: weekOf(today).map((date) => ({ date, committed: false })) };
       })();
 
-  const status = !hasGuest
+  const status = !hasUser
     ? 'commit one passage to begin'
     : summary.error
       ? summary.error.message
@@ -58,6 +60,7 @@ export function Streak() {
           })}
         </ol>
       </div>
+      <SaveNudge />
     </section>
   );
 }

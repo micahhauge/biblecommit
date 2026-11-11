@@ -3,7 +3,8 @@
 import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import type { components } from '@/api/schema';
-import { browserTimezone, getGuestToken, guestAuthorization, setGuestToken, useHasGuest } from '@/guest';
+import { browserTimezone, getGuestToken, guestAuthorization, setGuestToken } from '@/guest';
+import { isSignedIn, useHasUser } from '@/session';
 import { invalidateReading } from '@/me';
 
 export type Commit = components['schemas']['Commit'];
@@ -17,10 +18,10 @@ const recentKey = ['commits', 'recent'] as const;
  * Never fetches until this browser has a guest (or account).
  */
 export function useRecentCommits() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   return useInfiniteQuery({
     queryKey: recentKey,
-    enabled: hasGuest,
+    enabled: hasUser,
     initialPageParam: null as string | null,
     getNextPageParam: (last: Page) => last.nextCursor,
     queryFn: async ({ pageParam }) => {
@@ -43,9 +44,11 @@ function networkError(e: unknown, what: string) {
   return e instanceof TypeError ? new Error(`could not ${what}; check your connection`) : e;
 }
 
-async function postCommit(text: string, token: string): Promise<Commit> {
+/** Commits as the current user, or as `newGuestToken` for a guest whose token isn't stored yet. */
+async function postCommit(text: string, newGuestToken?: string): Promise<Commit> {
   try {
-    const { data, error } = await api.POST('/api/commits', { body: { text }, headers: { authorization: guestAuthorization(token) } });
+    const headers = newGuestToken ? { authorization: guestAuthorization(newGuestToken) } : {};
+    const { data, error } = await api.POST('/api/commits', { body: { text }, headers });
     if (data) return data;
     throw new Error(error?.error ?? 'could not save that commit');
   } catch (e) {
@@ -54,16 +57,15 @@ async function postCommit(text: string, token: string): Promise<Commit> {
 }
 
 /**
- * Commits a reading, creating the guest first if this is the browser's first commit.
+ * Commits a reading, creating the guest first if this is a signed-out browser's first commit.
  * `onSaved` runs as soon as the server has the commit, before the recent list updates.
  */
 export function useCommit({ onSaved }: { onSaved?: (commit: Commit) => void } = {}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (text: string) => {
-      const existing = getGuestToken();
-      if (existing) {
-        const commit = await postCommit(text, existing);
+      if (isSignedIn() || getGuestToken()) {
+        const commit = await postCommit(text);
         onSaved?.(commit);
         await Promise.all([queryClient.invalidateQueries({ queryKey: recentKey }), invalidateReading(queryClient)]);
         return commit;

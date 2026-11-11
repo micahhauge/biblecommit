@@ -1,7 +1,7 @@
-import { createApp, createDbDeps } from '@biblecommit/api';
+import { createApp, createDbDeps, verifyClerkSession } from '@biblecommit/api';
 import { handle } from 'hono/vercel';
 
-const app = createApp(createDbDeps());
+const app = createApp(createDbDeps(), { verifySession: verifyClerkSession() });
 
 export const GET = handle(app);
 export const POST = handle(app);

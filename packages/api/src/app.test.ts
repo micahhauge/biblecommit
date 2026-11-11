@@ -1,5 +1,5 @@
 import { createTestDb } from '@biblecommit/db/testing';
-import { commitRanges, users } from '@biblecommit/db';
+import { commitRanges, commits, users } from '@biblecommit/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app';
 import { createDbDeps } from './deps';
@@ -10,7 +10,9 @@ beforeEach(() => t.reset());
 
 // 03:00 UTC on Nov 10 is still the evening of Nov 9 in Chicago.
 let now = new Date('2026-11-10T03:00:00Z');
-const app = createApp(createDbDeps(t.db), { now: () => now });
+// Stands in for Clerk: a session JWT here is "clerk:<clerk user id>".
+const verifySession = async (jwt: string) => jwt.match(/^clerk:(.+)$/)?.[1];
+const app = createApp(createDbDeps(t.db), { now: () => now, verifySession });
 beforeEach(() => {
   now = new Date('2026-11-10T03:00:00Z');
 });
@@ -22,6 +24,14 @@ function post(path: string, body: unknown, headers: Record<string, string> = {})
 async function newGuest(timezone = 'America/Chicago') {
   const { token } = await (await post('/api/guests', { timezone })).json();
   return { Authorization: `Guest ${token}` };
+}
+
+function signedIn(clerkUserId: string) {
+  return { Authorization: `Bearer clerk:${clerkUserId}` };
+}
+
+function tokenOf(guest: Record<string, string>) {
+  return guest.Authorization!.replace(/^Guest /, '');
 }
 
 async function list(auth: Record<string, string>) {
@@ -293,14 +303,27 @@ describe('GET /api/me and PATCH /api/me', () => {
     const auth = await newGuest('America/Chicago');
     const res = await app.request('/api/me', { headers: auth });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ timezone: 'America/Chicago', modePref: 'system' });
+    expect(await res.json()).toEqual({ timezone: 'America/Chicago', modePref: null });
+  });
+
+  it('stores the mode once chosen, and changes it after', async () => {
+    const auth = await newGuest();
+    expect(await (await patch({ modePref: 'light' }, auth)).json()).toMatchObject({ modePref: 'light' });
+    expect(await (await app.request('/api/me', { headers: auth })).json()).toMatchObject({ modePref: 'light' });
+    await patch({ modePref: 'system' }, auth);
+    expect(await (await app.request('/api/me', { headers: auth })).json()).toMatchObject({ modePref: 'system' });
+  });
+
+  it('rejects an unknown mode', async () => {
+    const auth = await newGuest();
+    expect((await patch({ modePref: 'sepia' }, auth)).status).toBe(400);
   });
 
   it('updates the timezone, which then decides the user\'s local day', async () => {
     const auth = await newGuest('America/Chicago');
     const res = await patch({ timezone: 'Asia/Tokyo' }, auth);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ timezone: 'Asia/Tokyo', modePref: 'system' });
+    expect(await res.json()).toEqual({ timezone: 'Asia/Tokyo', modePref: null });
     expect(await (await app.request('/api/me', { headers: auth })).json()).toMatchObject({ timezone: 'Asia/Tokyo' });
     // Nov 10 already in Tokyo.
     expect(await (await post('/api/commits', { text: 'gen 1' }, auth)).json()).toMatchObject({ readOn: '2026-11-10' });
@@ -535,5 +558,101 @@ describe('GET /api/me/canon/:bookId', () => {
     }
     expect((await book(66, auth)).chapters).toHaveLength(22);
     expect((await app.request('/api/me/canon/1')).status).toBe(401);
+  });
+});
+
+describe('Clerk sessions', () => {
+  it('creates a row on a Clerk user\'s first authenticated request, and reuses it after', async () => {
+    const res = await app.request('/api/me', { headers: signedIn('user_a') });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ timezone: 'UTC', modePref: null });
+
+    await post('/api/commits', { text: 'john 3' }, signedIn('user_a'));
+    expect(await list(signedIn('user_a'))).toMatchObject([{ display: 'John 3' }]);
+    expect(await t.db.select({ clerkUserId: users.clerkUserId, guestTokenHash: users.guestTokenHash }).from(users)).toEqual([
+      { clerkUserId: 'user_a', guestTokenHash: null },
+    ]);
+  });
+
+  it('keeps each Clerk user\'s data separate', async () => {
+    await post('/api/commits', { text: 'john 3' }, signedIn('user_a'));
+    expect(await list(signedIn('user_b'))).toEqual([]);
+  });
+
+  it('rejects a session token that does not verify', async () => {
+    expect((await app.request('/api/me', { headers: { Authorization: 'Bearer forged' } })).status).toBe(401);
+    expect(await t.db.select().from(users)).toEqual([]);
+  });
+});
+
+describe('POST /api/me/claim', () => {
+  const claim = (clerkUserId: string, guestToken: string) => post('/api/me/claim', { guestToken }, signedIn(clerkUserId));
+
+  it('adopts the guest row when the account has none: same commits, timezone, and prefs; the token stops working', async () => {
+    const guest = await newGuest('America/Chicago');
+    await post('/api/commits', { text: 'john 3' }, guest);
+    const [before] = await t.db.select().from(users);
+
+    expect((await claim('user_a', tokenOf(guest))).status).toBe(204);
+
+    const rows = await t.db.select().from(users);
+    expect(rows).toEqual([{ ...before, clerkUserId: 'user_a', guestTokenHash: null }]);
+    expect(await list(signedIn('user_a'))).toMatchObject([{ display: 'John 3' }]);
+    const me = await app.request('/api/me', { headers: signedIn('user_a') });
+    expect(await me.json()).toEqual({ timezone: 'America/Chicago', modePref: null });
+    expect((await app.request('/api/commits', { headers: guest })).status).toBe(401);
+  });
+
+  it('merges into an existing account: the guest\'s commits join the account\'s, the account\'s timezone wins, the guest row goes', async () => {
+    await app.request('/api/me', { method: 'PATCH', body: JSON.stringify({ timezone: 'Asia/Tokyo', modePref: 'light' }), headers: { 'content-type': 'application/json', ...signedIn('user_a') } });
+    await post('/api/commits', { text: 'gen 1', readOn: '2026-11-01' }, signedIn('user_a'));
+    const guest = await newGuest('America/Chicago');
+    await post('/api/commits', { text: 'john 3', readOn: '2026-11-02' }, guest);
+    await app.request('/api/me', { method: 'PATCH', body: JSON.stringify({ modePref: 'dark' }), headers: { 'content-type': 'application/json', ...guest } });
+    // A deleted guest commit moves too, and stays deleted.
+    const gone = await (await post('/api/commits', { text: 'ruth', readOn: '2026-11-03' }, guest)).json();
+    await app.request(`/api/commits/${gone.id}`, { method: 'DELETE', headers: guest });
+
+    expect((await claim('user_a', tokenOf(guest))).status).toBe(204);
+
+    expect(await t.db.select({ clerkUserId: users.clerkUserId, timezone: users.timezone, modePref: users.modePref }).from(users)).toEqual([
+      { clerkUserId: 'user_a', timezone: 'Asia/Tokyo', modePref: 'light' },
+    ]);
+    expect((await list(signedIn('user_a'))).map((c) => c.display)).toEqual(['John 3', 'Genesis 1']);
+    expect(await t.db.select().from(commits)).toHaveLength(3);
+    expect(await t.db.select().from(commitRanges)).toHaveLength(3);
+    expect((await app.request('/api/commits', { headers: guest })).status).toBe(401);
+  });
+
+  it('is a no-op for an unknown or already-claimed token', async () => {
+    expect((await claim('user_a', 'never-issued')).status).toBe(204);
+    expect(await t.db.select().from(users)).toEqual([]);
+
+    const guest = await newGuest();
+    await post('/api/commits', { text: 'john 3' }, guest);
+    await claim('user_a', tokenOf(guest));
+    const after = await t.db.select().from(users);
+
+    // Again by the same account, and by a different one: nothing moves.
+    expect((await claim('user_a', tokenOf(guest))).status).toBe(204);
+    expect((await claim('user_b', tokenOf(guest))).status).toBe(204);
+    expect(await t.db.select().from(users)).toEqual(after);
+    expect(await list(signedIn('user_a'))).toHaveLength(1);
+  });
+
+  it('leaves other guests alone', async () => {
+    const mine = await newGuest();
+    const other = await newGuest();
+    await post('/api/commits', { text: 'john 3' }, other);
+    await claim('user_a', tokenOf(mine));
+    expect(await list(other)).toMatchObject([{ display: 'John 3' }]);
+    expect(await list(signedIn('user_a'))).toEqual([]);
+  });
+
+  it('requires a Clerk session, not a guest token', async () => {
+    const guest = await newGuest();
+    expect((await post('/api/me/claim', { guestToken: tokenOf(guest) }, guest)).status).toBe(401);
+    expect((await post('/api/me/claim', { guestToken: tokenOf(guest) })).status).toBe(401);
+    expect((await post('/api/me/claim', {}, signedIn('user_a'))).status).toBe(400);
   });
 });

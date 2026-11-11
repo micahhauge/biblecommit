@@ -348,6 +348,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a guest's data to the signed-in account
+         * @description Call right after sign-in while holding a guest token, then drop the token. A new account adopts the guest (its commits, timezone, and prefs); an existing account gets the guest's commits merged in and keeps its own timezone and prefs. Idempotent: an unknown or already-claimed token does nothing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The guest token to claim */
+            requestBody: {
+                content: {
+                    "application/json": {
+                        guestToken: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Claimed, or nothing to claim */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Not signed in with a Clerk session */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -391,8 +453,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Update the caller's timezone
-         * @description Clients send the browser/device timezone on load when it differs from the stored one.
+         * Update the caller's timezone or mode
+         * @description Clients send the browser/device timezone on load when it differs from the stored one, and the mode whenever the user changes it (or on load, while none is stored).
          */
         patch: {
             parameters: {
@@ -407,6 +469,7 @@ export interface paths {
                     "application/json": {
                         /** @example America/Chicago */
                         timezone?: string;
+                        modePref?: components["schemas"]["ModePref"];
                     };
                 };
             };
@@ -699,8 +762,8 @@ export interface components {
             timezone: string;
             modePref: components["schemas"]["ModePref"];
         };
-        /** @enum {string} */
-        ModePref: "system" | "dark" | "light";
+        /** @enum {string|null} */
+        ModePref: "system" | "dark" | "light" | null;
         TodaySummary: {
             /** Format: date */
             today: string;

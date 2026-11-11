@@ -1,6 +1,6 @@
 import { canonTotals, commitRanges, commits, createDb, users, type Db } from '@biblecommit/db';
 import { and, between, desc, eq, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
-import type { Commit, Deps, ModePref } from './app';
+import type { Commit, Deps, ModePref, User } from './app';
 
 /** Database-backed deps. The connection is created on first use, so importing this never needs DATABASE_URL. */
 export function createDbDeps(provided?: Db): Deps {
@@ -29,6 +29,11 @@ export function createDbDeps(provided?: Db): Deps {
     return rows.map((r): Commit => ({ ...r, createdAt: r.createdAt.toISOString() }));
   }
 
+  async function findUser(where: SQL): Promise<User | undefined> {
+    const [row] = await db().select({ id: users.id, timezone: users.timezone, modePref: users.modePref }).from(users).where(where);
+    return row && { ...row, modePref: row.modePref as ModePref | null };
+  }
+
   return {
     getCanonTotals: () => canonTotals(db()),
 
@@ -37,12 +42,33 @@ export function createDbDeps(provided?: Db): Deps {
       return row!;
     },
 
-    async findUserByGuestTokenHash(tokenHash) {
-      const [row] = await db()
-        .select({ id: users.id, timezone: users.timezone, modePref: users.modePref })
-        .from(users)
-        .where(eq(users.guestTokenHash, tokenHash));
-      return row && { ...row, modePref: row.modePref as ModePref };
+    findUserByGuestTokenHash: (tokenHash) => findUser(eq(users.guestTokenHash, tokenHash)),
+
+    async findOrCreateClerkUser(clerkUserId, timezone) {
+      const existing = await findUser(eq(users.clerkUserId, clerkUserId));
+      if (existing) return existing;
+      // A concurrent first request may have just created it; either way, read back the one row.
+      await db().insert(users).values({ clerkUserId, timezone }).onConflictDoNothing({ target: users.clerkUserId });
+      return (await findUser(eq(users.clerkUserId, clerkUserId)))!;
+    },
+
+    async claimGuest(clerkUserId, tokenHash) {
+      // One statement, so adopt-or-merge is atomic (neon-http has no transactions).
+      // Exactly one branch applies: adopt when the account has no row, else move and delete.
+      await db().execute(sql`
+        with guest as (select id from ${users} where guest_token_hash = ${tokenHash}),
+        account as (select id from ${users} where clerk_user_id = ${clerkUserId}),
+        adopted as (
+          update ${users} set clerk_user_id = ${clerkUserId}, guest_token_hash = null
+          where id in (select id from guest) and not exists (select from account)
+          returning id
+        ),
+        moved as (
+          update ${commits} set user_id = (select id from account)
+          where user_id in (select id from guest) and exists (select from account)
+          returning id
+        )
+        delete from ${users} where id in (select id from guest) and exists (select from account)`);
     },
 
     async createCommit({ id, userId, readOn, rawInput, display, createdAt, ranges, verseCount }) {
@@ -103,9 +129,9 @@ export function createDbDeps(provided?: Db): Deps {
         );
     },
 
-    async updateUser(userId, { timezone }) {
-      if (timezone === undefined) return;
-      await db().update(users).set({ timezone }).where(eq(users.id, userId));
+    async updateUser(userId, { timezone, modePref }) {
+      if (timezone === undefined && modePref === undefined) return;
+      await db().update(users).set({ timezone, modePref }).where(eq(users.id, userId));
     },
 
     async deleteCommit(userId, id, deletedAt) {

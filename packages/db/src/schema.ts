@@ -6,7 +6,8 @@ export const users = pgTable('users', {
   clerkUserId: text('clerk_user_id').unique(),
   guestTokenHash: text('guest_token_hash').unique(),
   timezone: text('timezone').notNull(),
-  modePref: text('mode_pref').notNull().default('system'),
+  /** 'system' | 'dark' | 'light'; null until the user (or their browser) has chosen. */
+  modePref: text('mode_pref'),
   createdAt: timestamptz('created_at'),
 });
 

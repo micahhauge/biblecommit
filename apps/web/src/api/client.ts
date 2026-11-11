@@ -1,5 +1,5 @@
 import createClient from 'openapi-fetch';
-import { getGuestToken, guestAuthorization } from '@/guest';
+import { authorization } from '@/session';
 import type { paths } from './schema';
 
 /** Typed client generated from the API's OpenAPI document (`pnpm gen:api`). */
@@ -10,9 +10,10 @@ export const api = createClient<paths>({
 });
 
 api.use({
-  onRequest({ request }) {
-    const token = getGuestToken();
-    if (token && !request.headers.has('authorization')) request.headers.set('authorization', guestAuthorization(token));
+  async onRequest({ request }) {
+    if (request.headers.has('authorization')) return request;
+    const value = await authorization();
+    if (value) request.headers.set('authorization', value);
     return request;
   },
 });

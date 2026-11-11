@@ -5,6 +5,7 @@ import { api } from '@/api/client';
 import { ModeToggle, Settings } from '@/components/ModeControls';
 import { guestAuthorization, setGuestToken } from '@/guest';
 import { ModeSync } from '@/mode';
+import { parseModePref } from '@/mode-pref';
 import { renderPage, signInAs, useTestServer } from '@/test/harness';
 
 const server = await useTestServer();
@@ -39,6 +40,14 @@ async function storedMode(headers: Record<string, string>) {
 
 beforeEach(() => {
   document.cookie = 'mode=; max-age=0; path=/';
+});
+
+describe('the default', () => {
+  it('is system until a mode is chosen (no cookie, or an unknown value)', () => {
+    expect(parseModePref(undefined)).toBe('system');
+    expect(parseModePref('sepia')).toBe('system');
+    expect(parseModePref('light')).toBe('light');
+  });
 });
 
 describe('the mode toggle', () => {

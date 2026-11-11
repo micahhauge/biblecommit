@@ -3,8 +3,8 @@
 export const MODES = ['system', 'dark', 'light'] as const;
 export type ModePref = (typeof MODES)[number];
 
-/** Until someone chooses: dark. "system" is opt-in. */
-export const DEFAULT_MODE: ModePref = 'dark';
+/** Until someone chooses: follow the device (dark when it states no preference). */
+export const DEFAULT_MODE: ModePref = 'system';
 
 /** Holds the mode so the server renders the right theme on the first byte. */
 export const MODE_COOKIE = 'mode';

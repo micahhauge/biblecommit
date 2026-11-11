@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description: 'Commit the Scripture you read.',
 };
 
-/** The mode the browser last chose (dark until it chooses), so the first paint is already right. */
+/** The mode the browser last chose (system until it chooses), so the first paint is already right. */
 async function modeFromCookie() {
   return parseModePref((await cookies()).get(MODE_COOKIE)?.value);
 }

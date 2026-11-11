@@ -194,7 +194,7 @@ Heatmap, coverage, and streak are derived by query. If it gets slow, add a `user
 ## 5. Look & feel
 - Minimal and keyboard-first (MonkeyType) meets moody watercolor: paper grain, soft pigment blooms, heatmap cells with watercolor "wash" edges (SVG turbulence/displacement).
 - Serif for Scripture and numbers, mono for UI chrome and the input.
-- Dark and light both supported. Mode defaults to **dark**; **system** (follow the device, dark when it states no preference) is opt-in.
+- Dark and light both supported. Mode defaults to **system**; if the device states no preference, use **dark**.
 
 ### Decided
 - **Palette: iron gall.** Blue-black manuscript ink. EB Garamond (serif) + JetBrains Mono (mono).

@@ -69,14 +69,10 @@ export function useCanon() {
   });
 }
 
-/**
- * Keeps the stored timezone in step with the browser's, so "today" means the same day
- * to the server as to the user. Checks once per load, and only once there is a user.
- */
-export function useTimezoneSync() {
+/** The caller's profile (timezone, mode). Fetched once per load, and only once there is a user. */
+export function useMe() {
   const hasUser = useHasUser();
-  const queryClient = useQueryClient();
-  const me = useQuery({
+  return useQuery({
     queryKey: meKey,
     enabled: hasUser,
     staleTime: Infinity,
@@ -86,6 +82,15 @@ export function useTimezoneSync() {
       return data;
     },
   });
+}
+
+/**
+ * Keeps the stored timezone in step with the browser's, so "today" means the same day
+ * to the server as to the user. Checks once per load, and only once there is a user.
+ */
+export function useTimezoneSync() {
+  const queryClient = useQueryClient();
+  const me = useMe();
 
   const stored = me.data?.timezone;
   useEffect(() => {

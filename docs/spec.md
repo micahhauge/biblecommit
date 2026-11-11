@@ -144,7 +144,7 @@ users
   clerk_user_id     text unique null   -- set once signed in / claimed
   guest_token_hash  text unique null   -- sha256 of guest token; raw token never stored
   timezone        text not null    -- IANA, e.g. America/Chicago
-  mode_pref       text default 'system'
+  mode_pref       text null        -- system | dark | light; null until chosen (the browser's mode is then stored)
   created_at      timestamptz
 
 books             (seeded) id smallint pk, name, short_name, section, chapter_count, first_verse_id, last_verse_id
@@ -194,7 +194,7 @@ Heatmap, coverage, and streak are derived by query. If it gets slow, add a `user
 ## 5. Look & feel
 - Minimal and keyboard-first (MonkeyType) meets moody watercolor: paper grain, soft pigment blooms, heatmap cells with watercolor "wash" edges (SVG turbulence/displacement).
 - Serif for Scripture and numbers, mono for UI chrome and the input.
-- Dark and light both supported. Mode defaults to **system**; if the device states no preference, use **dark**.
+- Dark and light both supported. Mode defaults to **dark**; **system** (follow the device, dark when it states no preference) is opt-in.
 
 ### Decided
 - **Palette: iron gall.** Blue-black manuscript ink. EB Garamond (serif) + JetBrains Mono (mono).

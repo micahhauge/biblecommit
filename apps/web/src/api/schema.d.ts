@@ -453,8 +453,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Update the caller's timezone
-         * @description Clients send the browser/device timezone on load when it differs from the stored one.
+         * Update the caller's timezone or mode
+         * @description Clients send the browser/device timezone on load when it differs from the stored one, and the mode whenever the user changes it (or on load, while none is stored).
          */
         patch: {
             parameters: {
@@ -469,6 +469,7 @@ export interface paths {
                     "application/json": {
                         /** @example America/Chicago */
                         timezone?: string;
+                        modePref?: components["schemas"]["ModePref"];
                     };
                 };
             };
@@ -761,8 +762,8 @@ export interface components {
             timezone: string;
             modePref: components["schemas"]["ModePref"];
         };
-        /** @enum {string} */
-        ModePref: "system" | "dark" | "light";
+        /** @enum {string|null} */
+        ModePref: "system" | "dark" | "light" | null;
         TodaySummary: {
             /** Format: date */
             today: string;

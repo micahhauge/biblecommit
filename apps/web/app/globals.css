@@ -1,6 +1,6 @@
 /* ───────── iron gall palette ─────────
-   Dark is the default. Light applies when the device prefers light and no
-   explicit mode is set, or when data-mode="light" is set on <html>. */
+   <html data-mode> is "dark" (the default), "light", or "system". Dark unless the mode is
+   light, or the mode is system and the device prefers light. */
 :root {
   --paper: #0f1115;
   --ink: #d9d4c7;
@@ -14,7 +14,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root:not([data-mode='dark']) {
+  :root[data-mode='system'] {
     --paper: #f2ede3;
     --ink: #1c1a17;
     --pig: 36 54 95;
@@ -42,6 +42,19 @@
   --faint: color-mix(in srgb, var(--ink) 24%, transparent);
   --hair: color-mix(in srgb, var(--ink) 11%, transparent);
   --pad: 44px;
+}
+
+/* While the mode changes, colors ease everywhere rather than snapping (see applyMode). */
+:root.easing *,
+:root.easing *::before,
+:root.easing *::after {
+  transition:
+    background-color 0.6s,
+    color 0.6s,
+    fill 0.6s,
+    stroke 0.6s,
+    border-color 0.6s,
+    text-decoration-color 0.6s !important;
 }
 
 /* ───────── base ───────── */

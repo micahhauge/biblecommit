@@ -31,7 +31,7 @@ export function createDbDeps(provided?: Db): Deps {
 
   async function findUser(where: SQL): Promise<User | undefined> {
     const [row] = await db().select({ id: users.id, timezone: users.timezone, modePref: users.modePref }).from(users).where(where);
-    return row && { ...row, modePref: row.modePref as ModePref };
+    return row && { ...row, modePref: row.modePref as ModePref | null };
   }
 
   return {
@@ -129,9 +129,9 @@ export function createDbDeps(provided?: Db): Deps {
         );
     },
 
-    async updateUser(userId, { timezone }) {
-      if (timezone === undefined) return;
-      await db().update(users).set({ timezone }).where(eq(users.id, userId));
+    async updateUser(userId, { timezone, modePref }) {
+      if (timezone === undefined && modePref === undefined) return;
+      await db().update(users).set({ timezone, modePref }).where(eq(users.id, userId));
     },
 
     async deleteCommit(userId, id, deletedAt) {

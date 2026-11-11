@@ -1,9 +1,12 @@
 import { ClerkProvider } from '@clerk/nextjs';
 import type { Metadata, Viewport } from 'next';
+import { cookies } from 'next/headers';
 import { EB_Garamond, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { Account } from '@/components/Account';
+import { ModeToggle, Settings } from '@/components/ModeControls';
 import { Nav } from '@/components/Nav';
+import { MODE_COOKIE, PAPER, parseModePref } from '@/mode-pref';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -15,19 +18,31 @@ export const metadata: Metadata = {
   description: 'Commit the Scripture you read.',
 };
 
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  viewportFit: 'cover',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f2ede3' },
-    { media: '(prefers-color-scheme: dark)', color: '#0f1115' },
-  ],
-};
+/** The mode the browser last chose (dark until it chooses), so the first paint is already right. */
+async function modeFromCookie() {
+  return parseModePref((await cookies()).get(MODE_COOKIE)?.value);
+}
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export async function generateViewport(): Promise<Viewport> {
+  const mode = await modeFromCookie();
+  return {
+    width: 'device-width',
+    initialScale: 1,
+    viewportFit: 'cover',
+    themeColor:
+      mode === 'system'
+        ? [
+            { media: '(prefers-color-scheme: light)', color: PAPER.light },
+            { media: '(prefers-color-scheme: dark)', color: PAPER.dark },
+          ]
+        : PAPER[mode],
+  };
+}
+
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const mode = await modeFromCookie();
   return (
-    <html lang="en" className={`${serif.variable} ${mono.variable}`}>
+    <html lang="en" className={`${serif.variable} ${mono.variable}`} data-mode={mode}>
       <body>
         <ClerkProvider>
           <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
@@ -55,21 +70,23 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </svg>
           <div className="grain" />
 
-          <header>
-            <div className="mark">
-              bible<i>commit</i>
-            </div>
-            <Nav variant="top" />
-            <div className="hbtns">
-              <Account />
-            </div>
-          </header>
-
           <Providers>
-            <main>{children}</main>
-          </Providers>
+            <header>
+              <div className="mark">
+                bible<i>commit</i>
+              </div>
+              <Nav variant="top" />
+              <div className="hbtns">
+                <Account />
+                <ModeToggle initial={mode} />
+                <Settings initial={mode} />
+              </div>
+            </header>
 
-          <Nav variant="bar" />
+            <main>{children}</main>
+
+            <Nav variant="bar" />
+          </Providers>
         </ClerkProvider>
       </body>
     </html>

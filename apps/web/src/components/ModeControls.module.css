@@ -1,0 +1,68 @@
+/* Ported from prototype/index.html (.modebtn, .setbtn, .seg, .sheet .set). */
+.hbtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dim);
+}
+.hbtn:hover,
+.hbtn:focus-visible {
+  color: var(--ink);
+}
+.hbtn svg {
+  width: 16px;
+  height: 16px;
+}
+.modeIcon circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+.modeIcon path {
+  fill: currentColor;
+}
+.setIcon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+.setIcon circle {
+  fill: currentColor;
+}
+
+.set {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: baseline;
+  gap: 14px 20px;
+  margin-top: 16px;
+  font-family: var(--mono), monospace;
+  font-size: 12px;
+  color: var(--dim);
+}
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.seg button {
+  color: var(--dim);
+  padding: 3px 0;
+}
+.seg button:hover {
+  color: var(--ink);
+}
+.seg button.on {
+  color: rgb(var(--pig));
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+}
+
+@media (max-width: 760px) {
+  /* Icons only in the cramped mobile header. */
+  .hbtn span {
+    display: none;
+  }
+}

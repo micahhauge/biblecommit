@@ -55,6 +55,8 @@ describe('signing in', () => {
     const user = userEvent.setup();
     const { client } = renderPage(<Today />);
     await commit(user, 'john 3');
+    // The guest token is stored once the commit lands; sign in only after that.
+    await waitFor(async () => expect(await passages()).toEqual(['John 3']));
 
     await signInAs('user_a', client);
 

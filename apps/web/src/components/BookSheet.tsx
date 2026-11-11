@@ -1,12 +1,12 @@
 'use client';
 
 import { chapterLabel, chapterLevel, getBook, readLabel, verseLabel, verseReads, type ChapterReads } from '@biblecommit/core';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useHasUser } from '@/session';
 import { useBookReads } from '@/me';
 import { useWidth } from '@/use-width';
 import styles from './BookSheet.module.css';
+import { Sheet } from './Sheet';
 
 interface Props {
   bookId: number;
@@ -37,39 +37,11 @@ const onActivate = (fn: () => void) => (e: KeyboardEvent) => {
  */
 export function BookSheet({ bookId, chapters, chapter: initialChapter = null, onClose }: Props) {
   const book = getBook(bookId)!;
-  const titleId = useId();
   const [chapter, setChapter] = useState<number | null>(initialChapter);
   const [readout, setReadout] = useState<string | null>(null);
-  const dialog = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const width = useWidth(body, DEFAULT_WIDTH);
 
-  // Esc closes; focus moves into the sheet and back to where it was on close; the page behind doesn't scroll.
-  const close = useRef(onClose);
-  close.current = onClose;
-  useEffect(() => {
-    const before = document.activeElement;
-    dialog.current?.focus();
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') close.current();
-      if (e.key !== 'Tab' || !dialog.current) return;
-      // Keep tabbing inside the sheet.
-      const stops = [...dialog.current.querySelectorAll<HTMLElement | SVGElement>('button, [tabindex="0"]')];
-      const edge = e.shiftKey ? stops[0] : stops.at(-1);
-      if (document.activeElement === edge || document.activeElement === dialog.current) {
-        e.preventDefault();
-        (e.shiftKey ? stops.at(-1) : stops[0])?.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = overflow;
-      if (before instanceof HTMLElement || before instanceof SVGElement) before.focus();
-    };
-  }, []);
 
   const hasUser = useHasUser();
   const verses = useBookReads(bookId);
@@ -89,74 +61,64 @@ export function BookSheet({ bookId, chapters, chapter: initialChapter = null, on
     setReadout(`${chapterLabel(bookId, n)} · ${readLabel(chapters[n - 1]!)}`);
   };
 
-  // Above everything, including the tab bar: <main> is its own stacking context.
-  return createPortal(
-    <>
-      <div className={styles.scrim} data-testid="scrim" onClick={onClose} />
-      <div ref={dialog} className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
-        <div className={styles.grab} aria-hidden="true" />
-        <button type="button" className={styles.close} onClick={onClose}>
-          close
-        </button>
-        <h3 id={titleId}>{book.name}</h3>
-        <div className={styles.sub} data-testid="book-sub">
-          {read} of {book.chapterCount} chapter{book.chapterCount === 1 ? '' : 's'} read
-          {readings > read && ` · ${readings} chapter-readings in all`}
-        </div>
-
-        <div ref={body}>
-        <svg
-          className={styles.chapters}
-          role="group"
-          aria-label={`chapters of ${book.name}`}
-          viewBox={`0 0 ${cols * (size + gap) - gap} ${rows * (size + gap) - gap}`}
-        >
-          {chapters.map((reads, i) => {
-            const n = i + 1;
-            const level = chapterLevel(reads);
-            const label = `${chapterLabel(bookId, n)} · ${readLabel(reads)}`;
-            const x = (i % cols) * (size + gap);
-            const y = Math.floor(i / cols) * (size + gap);
-            return (
-              <g
-                key={n}
-                role="button"
-                tabIndex={0}
-                aria-label={label}
-                aria-pressed={chapter === n}
-                data-level={level}
-                className={`${styles.ch} ${chapter === n ? styles.on : ''}`}
-                onClick={() => select(n)}
-                onKeyDown={onActivate(() => select(n))}
-                onMouseEnter={() => setReadout(label)}
-              >
-                <rect className={`${styles.c} ${styles[`l${level}`]}`} x={x} y={y} width={size} height={size} rx={5} />
-                <text className={`${styles.cn} ${level >= 3 ? styles.light : ''}`} x={x + size / 2} y={y + size / 2 + 4} textAnchor="middle">
-                  {n}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-
-        {chapter !== null && (
-          <VerseStrip
-            bookId={bookId}
-            chapter={chapter}
-            verses={bookVerses?.[chapter - 1]}
-            error={hasUser && verses.error ? verses.error.message : null}
-            width={width}
-            onReadout={setReadout}
-          />
-        )}
-        </div>
-
-        <p className={styles.status} data-testid="sheet-status">
-          {readout ?? (chapter === null ? 'tap a chapter to see its verses' : ' ')}
-        </p>
+  return (
+    <Sheet title={book.name} onClose={onClose}>
+      <div className={styles.sub} data-testid="book-sub">
+        {read} of {book.chapterCount} chapter{book.chapterCount === 1 ? '' : 's'} read
+        {readings > read && ` · ${readings} chapter-readings in all`}
       </div>
-    </>,
-    document.body,
+
+      <div ref={body} className={styles.body}>
+      <svg
+        className={styles.chapters}
+        role="group"
+        aria-label={`chapters of ${book.name}`}
+        viewBox={`0 0 ${cols * (size + gap) - gap} ${rows * (size + gap) - gap}`}
+      >
+        {chapters.map((reads, i) => {
+          const n = i + 1;
+          const level = chapterLevel(reads);
+          const label = `${chapterLabel(bookId, n)} · ${readLabel(reads)}`;
+          const x = (i % cols) * (size + gap);
+          const y = Math.floor(i / cols) * (size + gap);
+          return (
+            <g
+              key={n}
+              role="button"
+              tabIndex={0}
+              aria-label={label}
+              aria-pressed={chapter === n}
+              data-level={level}
+              className={`${styles.ch} ${chapter === n ? styles.on : ''}`}
+              onClick={() => select(n)}
+              onKeyDown={onActivate(() => select(n))}
+              onMouseEnter={() => setReadout(label)}
+            >
+              <rect className={`${styles.c} ${styles[`l${level}`]}`} x={x} y={y} width={size} height={size} rx={5} />
+              <text className={`${styles.cn} ${level >= 3 ? styles.light : ''}`} x={x + size / 2} y={y + size / 2 + 4} textAnchor="middle">
+                {n}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {chapter !== null && (
+        <VerseStrip
+          bookId={bookId}
+          chapter={chapter}
+          verses={bookVerses?.[chapter - 1]}
+          error={hasUser && verses.error ? verses.error.message : null}
+          width={width}
+          onReadout={setReadout}
+        />
+      )}
+      </div>
+
+      <p className={styles.status} data-testid="sheet-status">
+        {readout ?? (chapter === null ? 'tap a chapter to see its verses' : ' ')}
+      </p>
+    </Sheet>
   );
 }
 

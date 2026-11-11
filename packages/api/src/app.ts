@@ -55,14 +55,16 @@ export type ModePref = z.infer<typeof ModePref>;
 export interface User {
   id: string;
   timezone: string;
-  modePref: ModePref;
+  /** Null until chosen. */
+  modePref: ModePref | null;
 }
 
 export const Me = z
   .object({
     /** IANA timezone; the user's local days (streak, today, readOn defaults) are in it. */
     timezone: z.string().openapi({ example: 'America/Chicago' }),
-    modePref: ModePref,
+    /** Null until the user has chosen; clients then send the mode they're showing. */
+    modePref: ModePref.nullable(),
   })
   .openapi('Me');
 
@@ -206,7 +208,7 @@ export interface Deps {
   dailyVerses(userId: string, from: string, to: string): Promise<Array<{ readOn: string; verses: number }>>;
   /** Every verse range in the user's non-deleted commits, all time; only those overlapping `within`, if given. */
   listReadRanges(userId: string, within?: VerseRange): Promise<VerseRange[]>;
-  updateUser(userId: string, changes: { timezone?: string }): Promise<void>;
+  updateUser(userId: string, changes: { timezone?: string; modePref?: ModePref }): Promise<void>;
   /**
    * Soft-deletes one of the user's commits by setting `deleted_at`. Returns false if the
    * commit doesn't exist, isn't theirs, or is already deleted.
@@ -385,10 +387,14 @@ const getMeRoute = createRoute({
 const patchMeRoute = createRoute({
   method: 'patch',
   path: '/me',
-  summary: 'Update the caller\'s timezone',
-  description: 'Clients send the browser/device timezone on load when it differs from the stored one.',
+  summary: 'Update the caller\'s timezone or mode',
+  description:
+    'Clients send the browser/device timezone on load when it differs from the stored one, and the mode whenever ' +
+    'the user changes it (or on load, while none is stored).',
   security: anyUser,
-  request: { body: { required: true, ...json(z.object({ timezone: Timezone.optional() }), 'Fields to change') } },
+  request: {
+    body: { required: true, ...json(z.object({ timezone: Timezone.optional(), modePref: ModePref.optional() }), 'Fields to change') },
+  },
   responses: { 200: json(Me, 'The updated profile'), 400: json(ErrorBody, 'Invalid body'), 401: unauthorized },
 });
 
@@ -544,9 +550,13 @@ export function createApp(deps: Deps, { now = () => new Date(), verifySession = 
   app.openapi(patchMeRoute, async (c) => {
     const user = await caller(c);
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
-    const { timezone } = c.req.valid('json');
-    if (timezone !== undefined && timezone !== user.timezone) await deps.updateUser(user.id, { timezone });
-    return c.json({ timezone: timezone ?? user.timezone, modePref: user.modePref }, 200);
+    const { timezone = user.timezone, modePref = user.modePref } = c.req.valid('json');
+    const changes = {
+      ...(timezone !== user.timezone && { timezone }),
+      ...(modePref !== user.modePref && modePref !== null && { modePref }),
+    };
+    if (Object.keys(changes).length > 0) await deps.updateUser(user.id, changes);
+    return c.json({ timezone, modePref }, 200);
   });
 
   app.openapi(todayRoute, async (c) => {

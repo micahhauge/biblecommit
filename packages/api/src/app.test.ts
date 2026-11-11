@@ -303,14 +303,27 @@ describe('GET /api/me and PATCH /api/me', () => {
     const auth = await newGuest('America/Chicago');
     const res = await app.request('/api/me', { headers: auth });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ timezone: 'America/Chicago', modePref: 'system' });
+    expect(await res.json()).toEqual({ timezone: 'America/Chicago', modePref: null });
+  });
+
+  it('stores the mode once chosen, and changes it after', async () => {
+    const auth = await newGuest();
+    expect(await (await patch({ modePref: 'light' }, auth)).json()).toMatchObject({ modePref: 'light' });
+    expect(await (await app.request('/api/me', { headers: auth })).json()).toMatchObject({ modePref: 'light' });
+    await patch({ modePref: 'system' }, auth);
+    expect(await (await app.request('/api/me', { headers: auth })).json()).toMatchObject({ modePref: 'system' });
+  });
+
+  it('rejects an unknown mode', async () => {
+    const auth = await newGuest();
+    expect((await patch({ modePref: 'sepia' }, auth)).status).toBe(400);
   });
 
   it('updates the timezone, which then decides the user\'s local day', async () => {
     const auth = await newGuest('America/Chicago');
     const res = await patch({ timezone: 'Asia/Tokyo' }, auth);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ timezone: 'Asia/Tokyo', modePref: 'system' });
+    expect(await res.json()).toEqual({ timezone: 'Asia/Tokyo', modePref: null });
     expect(await (await app.request('/api/me', { headers: auth })).json()).toMatchObject({ timezone: 'Asia/Tokyo' });
     // Nov 10 already in Tokyo.
     expect(await (await post('/api/commits', { text: 'gen 1' }, auth)).json()).toMatchObject({ readOn: '2026-11-10' });
@@ -552,7 +565,7 @@ describe('Clerk sessions', () => {
   it('creates a row on a Clerk user\'s first authenticated request, and reuses it after', async () => {
     const res = await app.request('/api/me', { headers: signedIn('user_a') });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ timezone: 'UTC', modePref: 'system' });
+    expect(await res.json()).toEqual({ timezone: 'UTC', modePref: null });
 
     await post('/api/commits', { text: 'john 3' }, signedIn('user_a'));
     expect(await list(signedIn('user_a'))).toMatchObject([{ display: 'John 3' }]);
@@ -586,23 +599,24 @@ describe('POST /api/me/claim', () => {
     expect(rows).toEqual([{ ...before, clerkUserId: 'user_a', guestTokenHash: null }]);
     expect(await list(signedIn('user_a'))).toMatchObject([{ display: 'John 3' }]);
     const me = await app.request('/api/me', { headers: signedIn('user_a') });
-    expect(await me.json()).toEqual({ timezone: 'America/Chicago', modePref: 'system' });
+    expect(await me.json()).toEqual({ timezone: 'America/Chicago', modePref: null });
     expect((await app.request('/api/commits', { headers: guest })).status).toBe(401);
   });
 
   it('merges into an existing account: the guest\'s commits join the account\'s, the account\'s timezone wins, the guest row goes', async () => {
-    await app.request('/api/me', { method: 'PATCH', body: JSON.stringify({ timezone: 'Asia/Tokyo' }), headers: { 'content-type': 'application/json', ...signedIn('user_a') } });
+    await app.request('/api/me', { method: 'PATCH', body: JSON.stringify({ timezone: 'Asia/Tokyo', modePref: 'light' }), headers: { 'content-type': 'application/json', ...signedIn('user_a') } });
     await post('/api/commits', { text: 'gen 1', readOn: '2026-11-01' }, signedIn('user_a'));
     const guest = await newGuest('America/Chicago');
     await post('/api/commits', { text: 'john 3', readOn: '2026-11-02' }, guest);
+    await app.request('/api/me', { method: 'PATCH', body: JSON.stringify({ modePref: 'dark' }), headers: { 'content-type': 'application/json', ...guest } });
     // A deleted guest commit moves too, and stays deleted.
     const gone = await (await post('/api/commits', { text: 'ruth', readOn: '2026-11-03' }, guest)).json();
     await app.request(`/api/commits/${gone.id}`, { method: 'DELETE', headers: guest });
 
     expect((await claim('user_a', tokenOf(guest))).status).toBe(204);
 
-    expect(await t.db.select({ clerkUserId: users.clerkUserId, timezone: users.timezone }).from(users)).toEqual([
-      { clerkUserId: 'user_a', timezone: 'Asia/Tokyo' },
+    expect(await t.db.select({ clerkUserId: users.clerkUserId, timezone: users.timezone, modePref: users.modePref }).from(users)).toEqual([
+      { clerkUserId: 'user_a', timezone: 'Asia/Tokyo', modePref: 'light' },
     ]);
     expect((await list(signedIn('user_a'))).map((c) => c.display)).toEqual(['John 3', 'Genesis 1']);
     expect(await t.db.select().from(commits)).toHaveLength(3);

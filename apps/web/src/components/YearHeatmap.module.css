@@ -1,0 +1,73 @@
+/* Ported from prototype/index.html (cells, .yearscroll). #wash is defined in app/layout.tsx. */
+.scroll {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.scroll::-webkit-scrollbar {
+  display: none;
+}
+.scroll svg {
+  display: block;
+  width: 100%;
+  min-width: 620px;
+  height: auto;
+  overflow: visible;
+}
+.scroll text {
+  font-family: var(--mono), monospace;
+  font-size: 9px;
+  fill: var(--dim);
+}
+
+.cells {
+  filter: url(#wash);
+}
+.c {
+  transition: fill 0.5s;
+}
+.l0 {
+  fill: color-mix(in srgb, var(--ink) var(--empty), transparent);
+}
+.l1 {
+  fill: rgb(var(--pig) / 0.22);
+}
+.l2 {
+  fill: rgb(var(--pig) / 0.42);
+}
+.l3 {
+  fill: rgb(var(--pig) / 0.66);
+}
+.l4 {
+  fill: rgb(var(--pig) / 0.92);
+}
+.c:not(.l0) {
+  stroke: rgb(var(--pig) / 0.32);
+  stroke-width: 0.9;
+}
+.today {
+  stroke: var(--faint);
+  stroke-width: 0.9;
+}
+@media (hover: hover) {
+  .c:hover {
+    stroke: var(--ink);
+    stroke-width: 1;
+  }
+}
+
+.status {
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+  margin-top: 10px;
+  min-height: 1.5em;
+}
+
+@media (max-width: 760px) {
+  /* fade the oldest weeks in at the left edge as it scrolls */
+  .scroll {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
+    mask-image: linear-gradient(to right, transparent, #000 28px);
+  }
+}

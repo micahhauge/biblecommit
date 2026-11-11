@@ -487,6 +487,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/year": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The year heatmap: daily verse totals for 53 weeks, and intensity thresholds */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A day in the last week shown. Defaults to the caller's today. */
+                    end?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The year */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Year"];
+                    };
+                };
+                /** @description Invalid end date */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or unknown credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -554,6 +611,16 @@ export interface components {
                 committed: boolean;
             }[];
             commits: components["schemas"]["Commit"][];
+        };
+        Year: {
+            /** Format: date */
+            today: string;
+            days: {
+                /** Format: date */
+                date: string;
+                verses: number;
+            }[];
+            thresholds: number[];
         };
     };
     responses: never;

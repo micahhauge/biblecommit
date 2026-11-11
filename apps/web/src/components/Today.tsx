@@ -6,6 +6,7 @@ import { useCommit, useDeleteCommit, useRecentCommits, type Commit } from '@/com
 import { browserTimezone, useHasGuest } from '@/guest';
 import { Streak } from './Streak';
 import styles from './Today.module.css';
+import { YearHeatmap } from './YearHeatmap';
 
 const EXAMPLES = ['john 1', 'psalm 23', 'gen 1-3'];
 
@@ -166,6 +167,8 @@ export function Today() {
       </section>
 
       <Streak />
+
+      <YearHeatmap />
 
       {undoable && <UndoToast key={undoable.id} commit={undoable} onUndo={() => deleteCommit(undoable.id)} onExpire={() => setUndoable(null)} />}
 

@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { isTimezone, localDate, parse, streak, weekOf, type VerseRange } from '@biblecommit/core';
+import { bucketThresholds, isTimezone, localDate, parse, streak, weekOf, yearDays, YEAR_DAYS, type VerseRange } from '@biblecommit/core';
 import type { Context } from 'hono';
 import { hashGuestToken, newGuestToken } from './guest-token';
 
@@ -80,6 +80,28 @@ export const TodaySummary = z
   })
   .openapi('TodaySummary');
 
+export const Year = z
+  .object({
+    /** The user's local date right now. Days after it are always 0. */
+    today: z.iso.date(),
+    /** 53 Sunday–Saturday weeks, oldest first, ending with the week of `end`. */
+    days: z
+      .array(
+        z.object({
+          date: z.iso.date(),
+          /** Verses read that day, repeats counted. */
+          verses: z.number().int(),
+        }),
+      )
+      .length(YEAR_DAYS),
+    /**
+     * The fewest verses for intensity buckets 1–4 (0 verses is bucket 0): quartiles of the
+     * window's reading days, or 1 / 11 / 31 / 81 with fewer than 8 of them.
+     */
+    thresholds: z.array(z.number().int()).length(4),
+  })
+  .openapi('Year');
+
 export interface NewCommit {
   id: string;
   userId: string;
@@ -132,6 +154,8 @@ export interface Deps {
   listCommitsOn(userId: string, readOn: string): Promise<Commit[]>;
   /** Every distinct `readOn` among the user's non-deleted commits. */
   listReadDays(userId: string): Promise<string[]>;
+  /** Verses read per local date from `from` to `to` inclusive, repeats counted; days with none are left out. */
+  dailyVerses(userId: string, from: string, to: string): Promise<Array<{ readOn: string; verses: number }>>;
   updateUser(userId: string, changes: { timezone?: string }): Promise<void>;
   /**
    * Soft-deletes one of the user's commits by setting `deleted_at`. Returns false if the
@@ -300,6 +324,19 @@ const todayRoute = createRoute({
   responses: { 200: json(TodaySummary, 'Today'), 401: unauthorized },
 });
 
+const yearRoute = createRoute({
+  method: 'get',
+  path: '/me/year',
+  summary: 'The year heatmap: daily verse totals for 53 weeks, and intensity thresholds',
+  security: [{ guest: [] }],
+  request: {
+    query: z.object({
+      end: z.iso.date().optional().openapi({ description: 'A day in the last week shown. Defaults to the caller\'s today.' }),
+    }),
+  },
+  responses: { 200: json(Year, 'The year'), 400: json(ErrorBody, 'Invalid end date'), 401: unauthorized },
+});
+
 export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) {
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
@@ -401,6 +438,17 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
     const { length, committedToday } = streak(read, today);
     const week = weekOf(today).map((date) => ({ date, committed: date <= today && read.has(date) }));
     return c.json({ today, streak: length, committedToday, week, commits }, 200);
+  });
+
+  app.openapi(yearRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const today = localDate(now(), user.timezone);
+    const dates = yearDays(c.req.valid('query').end ?? today);
+    const rows = await deps.dailyVerses(user.id, dates[0]!, dates.at(-1)!);
+    const verses = new Map(rows.map((r) => [r.readOn, r.verses]));
+    const days = dates.map((date) => ({ date, verses: verses.get(date) ?? 0 }));
+    return c.json({ today, days, thresholds: bucketThresholds(verses.values()) }, 200);
   });
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'guest', {

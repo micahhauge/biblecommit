@@ -80,8 +80,8 @@ describe('committing', () => {
     expect(preview()).toHaveTextContent('committed.');
     expect(screen.queryByRole('group', { name: /examples/i })).toBeNull();
     expect(server.requests.slice(0, 2)).toEqual(['POST /api/guests', 'POST /api/commits']);
-    // The new guest's first fetch is the streak; the recent list was seeded from the commit.
-    await waitFor(() => expect(server.requests.slice(2)).toEqual(['GET /api/me/today']));
+    // The new guest's first fetches are the streak and the year; the recent list was seeded from the commit.
+    await waitFor(() => expect(server.requests.slice(2).sort()).toEqual(['GET /api/me/today', 'GET /api/me/year']));
   });
 
   it('reuses the guest for later commits', async () => {
@@ -285,6 +285,17 @@ describe('load more', () => {
   });
 });
 
+/** A returning guest whose commits are already on the server: Genesis 1 on the first date, Genesis 2 on the next, … */
+async function returningGuest(...readOns: string[]) {
+  const { data } = await api.POST('/api/guests', { body: { timezone: 'America/Chicago' } });
+  const authorization = guestAuthorization(data!.token);
+  for (const [i, readOn] of readOns.entries()) {
+    await api.POST('/api/commits', { body: { text: `gen ${i + 1}`, readOn }, headers: { authorization } });
+  }
+  setGuestToken(data!.token);
+  server.requests.length = 0;
+}
+
 describe('the streak', () => {
   const streakNumber = () => screen.getByTestId('streak');
   const status = () => screen.getByTestId('streak-status');
@@ -294,17 +305,6 @@ describe('the streak', () => {
       .getAllByRole('listitem')
       .map((li) => li.getAttribute('aria-label')!)
       .filter((l) => l.endsWith('committed'));
-
-  /** A returning guest whose commits are already on the server: Genesis 1 on the first date, Genesis 2 on the next, … */
-  async function returningGuest(...readOns: string[]) {
-    const { data } = await api.POST('/api/guests', { body: { timezone: 'America/Chicago' } });
-    const authorization = guestAuthorization(data!.token);
-    for (const [i, readOn] of readOns.entries()) {
-      await api.POST('/api/commits', { body: { text: `gen ${i + 1}`, readOn }, headers: { authorization } });
-    }
-    setGuestToken(data!.token);
-    server.requests.length = 0;
-  }
 
   it('starts at zero with an empty week for a new visitor, without fetching', async () => {
     renderPage(<Today />);
@@ -368,5 +368,64 @@ describe('the streak', () => {
     await user.click(screen.getByRole('button', { name: 'yes' }));
     await waitFor(() => expect(streakNumber()).toHaveTextContent('0'));
     expect(committedDays()).toEqual([]);
+  });
+});
+
+describe('the year heatmap', () => {
+  const heatmap = () => screen.getByRole('img', { name: /the last 53 weeks/i });
+  const subtitle = () => screen.getByTestId('year-sub');
+  const yearStatus = () => screen.getByTestId('year-status');
+  /** The cells drawn so far: one per day up to today. */
+  const cells = () => [...heatmap().querySelectorAll('rect')];
+  const cellFor = (label: string) => cells().find((c) => c.querySelector('title')!.textContent!.startsWith(`${label} ·`))!;
+  /** Intensity bucket per drawn day that has any reading, in date order. */
+  const levels = () => cells().map((c) => Number(c.dataset.level)).filter((l) => l > 0);
+
+  it('is an empty year for a new visitor, without fetching', async () => {
+    renderPage(<Today />);
+    expect(subtitle()).toHaveTextContent('your year begins today');
+    // 52 full weeks plus Sunday and Monday (today) of this one.
+    expect(cells()).toHaveLength(52 * 7 + 2);
+    expect(levels()).toEqual([]);
+    expect(server.requests).toEqual([]);
+  });
+
+  it('shades a returning guest\'s days by verses read, and totals them', async () => {
+    // Genesis 1 (31 verses) on Nov 7, Genesis 2 (25) on Nov 8: fixed buckets, so 3 then 2.
+    await returningGuest('2026-11-07', '2026-11-08');
+    renderPage(<Today />);
+    await waitFor(() => expect(subtitle()).toHaveTextContent('56 verses · 2 days'));
+    expect(levels()).toEqual([3, 2]);
+    expect(cellFor('nov 7').dataset.level).toBe('3');
+  });
+
+  it('shows a day\'s date and verses on hover, and on tap', async () => {
+    await returningGuest('2026-11-08');
+    const user = userEvent.setup();
+    renderPage(<Today />);
+    await waitFor(() => expect(levels()).toEqual([3]));
+
+    await user.hover(cellFor('yesterday'));
+    expect(yearStatus()).toHaveTextContent('yesterday · 31 verses');
+    await user.hover(cellFor('nov 2'));
+    expect(yearStatus()).toHaveTextContent('nov 2 · nothing read');
+    await user.unhover(heatmap());
+    expect(yearStatus()).toHaveTextContent(/^\s*$/);
+
+    setPointer('coarse');
+    await user.pointer({ keys: '[TouchA]', target: cellFor('today') });
+    expect(yearStatus()).toHaveTextContent('today · nothing read');
+  });
+
+  it('fills in on a commit and empties on undo, without a reload', async () => {
+    const user = userEvent.setup();
+    renderPage(<Today />);
+    await commitAll(user, 'psalm 23');
+    await waitFor(() => expect(subtitle()).toHaveTextContent('6 verses · 1 day'));
+    expect(cellFor('today').dataset.level).toBe('1');
+
+    await user.click(await screen.findByRole('button', { name: 'undo' }));
+    await waitFor(() => expect(subtitle()).toHaveTextContent('your year begins today'));
+    expect(levels()).toEqual([]);
   });
 });

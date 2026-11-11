@@ -446,3 +446,47 @@ describe('GET /api/me/year', () => {
     expect((await app.request('/api/me/year')).status).toBe(401);
   });
 });
+
+describe('GET /api/me/canon', () => {
+  type Canon = { chapters: Array<{ times: number; versesRead: number }>; chaptersRead: number; readMoreThanOnce: number; coverage: number };
+  async function canon(auth: Record<string, string>): Promise<Canon> {
+    const res = await app.request('/api/me/canon', { headers: auth });
+    expect(res.status).toBe(200);
+    return res.json();
+  }
+  // Indexes into `chapters` (chapter ID − 1): Genesis 12 is ID 12, Psalm 23 is 501, John 3 is 1000.
+  const GEN_12 = 11;
+  const PS_23 = 500;
+  const JOHN_3 = 999;
+
+  it('is 1,189 unread chapters and 0 coverage for a new guest', async () => {
+    const body = await canon(await newGuest());
+    expect(body.chapters).toHaveLength(1189);
+    expect(body.chapters.every((c) => c.times === 0 && c.versesRead === 0)).toBe(true);
+    expect(body).toMatchObject({ chaptersRead: 0, readMoreThanOnce: 0, coverage: 0 });
+  });
+
+  it('counts whole-chapter reads all time, with repeats, and partly read chapters', async () => {
+    const auth = await newGuest();
+    await post('/api/commits', { text: 'gen 12' }, auth);
+    await post('/api/commits', { text: 'john 3', readOn: '2024-01-01' }, auth);
+    await post('/api/commits', { text: 'yesterday john 3' }, auth);
+    await post('/api/commits', { text: 'ps 23:1-4' }, auth);
+    const body = await canon(auth);
+    expect(body.chapters[GEN_12]).toEqual({ times: 1, versesRead: 20 });
+    expect(body.chapters[JOHN_3]).toEqual({ times: 2, versesRead: 36 });
+    expect(body.chapters[PS_23]).toEqual({ times: 0, versesRead: 4 });
+    expect(body).toMatchObject({ chaptersRead: 2, readMoreThanOnce: 1, coverage: 2 / 1189 });
+  });
+
+  it('leaves out deleted commits and other users\' commits, and requires a guest token', async () => {
+    const auth = await newGuest();
+    const other = await newGuest();
+    await post('/api/commits', { text: 'gen 1' }, other);
+    const { id } = await (await post('/api/commits', { text: 'gen 2' }, auth)).json();
+    expect((await canon(auth)).chaptersRead).toBe(1);
+    await app.request(`/api/commits/${id}`, { method: 'DELETE', headers: auth });
+    expect((await canon(auth)).chaptersRead).toBe(0);
+    expect((await app.request('/api/me/canon')).status).toBe(401);
+  });
+});

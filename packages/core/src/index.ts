@@ -4,3 +4,4 @@ export * from './parse';
 export * from './dates';
 export * from './streak';
 export * from './year';
+export * from './canon-reads';

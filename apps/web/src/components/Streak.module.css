@@ -51,3 +51,30 @@
   outline: 1px solid var(--faint);
   outline-offset: 2px;
 }
+
+/* The one-time "sign in to save" nudge under the streak. */
+.nudge {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-top: 28px;
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.nudgeLink {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--pig));
+  text-underline-offset: 4px;
+}
+.nudgeX {
+  padding: 4px 0 4px 12px;
+  color: var(--faint);
+}
+.nudgeX:hover,
+.nudgeX:focus-visible {
+  color: var(--ink);
+}

@@ -148,6 +148,12 @@ header {
   gap: 22px;
   min-width: 1px;
 }
+.hlink {
+  color: var(--dim);
+}
+.hlink:hover {
+  color: var(--ink);
+}
 .tabbar {
   display: none;
 }

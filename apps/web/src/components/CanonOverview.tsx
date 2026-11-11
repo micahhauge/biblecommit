@@ -2,7 +2,7 @@
 
 import { BOOKS, CHAPTERS, chapterLabel, getBook, getChapter, chapterLevel, chapterReads, coverage, readLabel, SECTIONS, TOTAL_CHAPTERS, type ChapterReads } from '@biblecommit/core';
 import { useRef, useState } from 'react';
-import { useHasGuest } from '@/guest';
+import { useHasUser } from '@/session';
 import { useCanon, type Canon } from '@/me';
 import { useWidth } from '@/use-width';
 import { BookSheet } from './BookSheet';
@@ -36,9 +36,9 @@ const percent = (fraction: number) => (fraction === 0 ? '0%' : `${(fraction * 10
  * read chapters sit lighter than 1×. Hover (or tap) a chapter for e.g. "Genesis 12 · read 2×".
  */
 export function CanonOverview() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   const canon = useCanon();
-  const data = hasGuest ? canon.data : emptyCanon();
+  const data = hasUser ? canon.data : emptyCanon();
   const [active, setActive] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const width = useWidth(box, DEFAULT_WIDTH);
@@ -120,7 +120,7 @@ export function CanonOverview() {
   return (
     <section aria-labelledby="canon-heading">
       <h2 id="canon-heading">canon</h2>
-      {canon.error && hasGuest ? (
+      {canon.error && hasUser ? (
         <p className="empty">{canon.error.message}</p>
       ) : (
         <div className={styles.covrow}>

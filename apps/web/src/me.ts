@@ -4,7 +4,8 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { useEffect } from 'react';
 import { api } from '@/api/client';
 import type { components } from '@/api/schema';
-import { browserTimezone, useHasGuest } from '@/guest';
+import { browserTimezone } from '@/guest';
+import { useHasUser } from '@/session';
 
 export type TodaySummary = components['schemas']['TodaySummary'];
 export type Year = components['schemas']['Year'];
@@ -28,10 +29,10 @@ export function invalidateReading(queryClient: QueryClient) {
 
 /** Streak and this week. Never fetches until this browser has a guest (or account). */
 export function useToday() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   return useQuery({
     queryKey: todayKey,
-    enabled: hasGuest,
+    enabled: hasUser,
     queryFn: async () => {
       const { data, error } = await api.GET('/api/me/today');
       if (error || !data) throw new Error('could not load your streak');
@@ -42,10 +43,10 @@ export function useToday() {
 
 /** The year heatmap ending this week. Never fetches until this browser has a guest (or account). */
 export function useYear() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   return useQuery({
     queryKey: yearKey,
-    enabled: hasGuest,
+    enabled: hasUser,
     queryFn: async () => {
       const { data, error } = await api.GET('/api/me/year');
       if (error || !data) throw new Error('could not load your year');
@@ -56,10 +57,10 @@ export function useYear() {
 
 /** How much of the canon has been read. Never fetches until this browser has a guest (or account). */
 export function useCanon() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   return useQuery({
     queryKey: canonKey,
-    enabled: hasGuest,
+    enabled: hasUser,
     queryFn: async () => {
       const { data, error } = await api.GET('/api/me/canon');
       if (error || !data) throw new Error('could not load your canon');
@@ -73,11 +74,11 @@ export function useCanon() {
  * to the server as to the user. Checks once per load, and only once there is a user.
  */
 export function useTimezoneSync() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   const queryClient = useQueryClient();
   const me = useQuery({
     queryKey: meKey,
-    enabled: hasGuest,
+    enabled: hasUser,
     staleTime: Infinity,
     queryFn: async () => {
       const { data, error } = await api.GET('/api/me');
@@ -111,10 +112,10 @@ export function TimezoneSync() {
 
 /** How often each verse of one book has been read. Never fetches until this browser has a guest (or account). */
 export function useBookReads(bookId: number) {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   return useQuery({
     queryKey: bookKey(bookId),
-    enabled: hasGuest,
+    enabled: hasUser,
     queryFn: async () => {
       const { data, error } = await api.GET('/api/me/canon/{bookId}', { params: { path: { bookId } } });
       if (error || !data) throw new Error('could not load this book');

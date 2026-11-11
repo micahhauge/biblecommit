@@ -2,7 +2,8 @@
 
 import { bucket, dayLabel, FIXED_THRESHOLDS, localDate, yearDays, type Thresholds } from '@biblecommit/core';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { browserTimezone, useHasGuest } from '@/guest';
+import { browserTimezone } from '@/guest';
+import { useHasUser } from '@/session';
 import { useYear, type Year } from '@/me';
 import styles from './YearHeatmap.module.css';
 
@@ -30,9 +31,9 @@ function describe(date: string, verses: number, today: string) {
  * a day for its date and verse count. On narrow screens it scrolls sideways, opening on this month.
  */
 export function YearHeatmap() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   const year = useYear();
-  const data = hasGuest ? year.data : emptyYear();
+  const data = hasUser ? year.data : emptyYear();
   const [active, setActive] = useState<number | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 

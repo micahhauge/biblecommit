@@ -182,6 +182,15 @@ export interface Deps {
   getCanonTotals(): Promise<CanonTotals>;
   createGuest(guest: { tokenHash: string; timezone: string }): Promise<{ id: string }>;
   findUserByGuestTokenHash(tokenHash: string): Promise<User | undefined>;
+  /** The user signed in as this Clerk user, created with `timezone` if they have no row yet. */
+  findOrCreateClerkUser(clerkUserId: string, timezone: string): Promise<User>;
+  /**
+   * Moves the guest with this token hash to the Clerk user, atomically. If the Clerk user
+   * has no row, the guest row adopts the Clerk id and loses its token. Otherwise the guest's
+   * commits are reassigned to the existing row (whose timezone and prefs are kept) and the
+   * guest row is deleted. No guest with that hash: does nothing.
+   */
+  claimGuest(clerkUserId: string, guestTokenHash: string): Promise<void>;
   /** Stores a commit and its verse ranges atomically. */
   createCommit(commit: NewCommit): Promise<Commit>;
   /**
@@ -211,6 +220,11 @@ export interface Deps {
 export interface Options {
   /** Clock, injectable for tests. */
   now?: () => Date;
+  /**
+   * Verifies a Clerk session JWT (`Authorization: Bearer <jwt>`) and returns its Clerk user id,
+   * or undefined if it isn't valid. Without one, no Bearer token is accepted.
+   */
+  verifySession?: (jwt: string) => Promise<string | undefined>;
 }
 
 const RECENT_LIMIT = 10;
@@ -221,6 +235,10 @@ const json = <T extends z.ZodType>(schema: T, description: string) => ({
   content: { 'application/json': { schema } },
 });
 const unauthorized = json(ErrorBody, 'Missing or unknown credentials');
+/** Either a guest token or a Clerk session. */
+const anyUser: Array<Record<string, string[]>> = [{ guest: [] }, { clerk: [] }];
+/** New users are created in UTC; clients then send their timezone (PATCH /api/me). */
+const DEFAULT_TIMEZONE = 'UTC';
 
 const Timezone = z.string().refine(isTimezone, 'unknown timezone').openapi({ example: 'America/Chicago' });
 
@@ -277,7 +295,7 @@ const createCommitRoute = createRoute({
   method: 'post',
   path: '/commits',
   summary: 'Commit a reading. The server re-parses the text.',
-  security: [{ guest: [] }],
+  security: anyUser,
   request: {
     body: {
       required: true,
@@ -303,7 +321,7 @@ const listCommitsRoute = createRoute({
   method: 'get',
   path: '/commits',
   summary: 'Recent commits, newest first, a page at a time',
-  security: [{ guest: [] }],
+  security: anyUser,
   request: {
     query: z.object({
       cursor: z.string().optional().openapi({ description: '`nextCursor` from the previous page; omit for the first page' }),
@@ -329,7 +347,7 @@ const deleteCommitRoute = createRoute({
   method: 'delete',
   path: '/commits/{id}',
   summary: 'Delete a commit (soft). Powers undo and the delete in the recent list.',
-  security: [{ guest: [] }],
+  security: anyUser,
   request: { params: z.object({ id: z.string().uuid() }) },
   responses: {
     204: { description: 'Deleted' },
@@ -339,11 +357,28 @@ const deleteCommitRoute = createRoute({
   },
 });
 
+const claimRoute = createRoute({
+  method: 'post',
+  path: '/me/claim',
+  summary: 'Move a guest\'s data to the signed-in account',
+  description:
+    'Call right after sign-in while holding a guest token, then drop the token. A new account adopts the guest ' +
+    '(its commits, timezone, and prefs); an existing account gets the guest\'s commits merged in and keeps its own ' +
+    'timezone and prefs. Idempotent: an unknown or already-claimed token does nothing.',
+  security: [{ clerk: [] }],
+  request: { body: { required: true, ...json(z.object({ guestToken: z.string().min(1) }), 'The guest token to claim') } },
+  responses: {
+    204: { description: 'Claimed, or nothing to claim' },
+    400: json(ErrorBody, 'Invalid body'),
+    401: json(ErrorBody, 'Not signed in with a Clerk session'),
+  },
+});
+
 const getMeRoute = createRoute({
   method: 'get',
   path: '/me',
   summary: 'The caller\'s profile and preferences',
-  security: [{ guest: [] }],
+  security: anyUser,
   responses: { 200: json(Me, 'Profile'), 401: unauthorized },
 });
 
@@ -352,7 +387,7 @@ const patchMeRoute = createRoute({
   path: '/me',
   summary: 'Update the caller\'s timezone',
   description: 'Clients send the browser/device timezone on load when it differs from the stored one.',
-  security: [{ guest: [] }],
+  security: anyUser,
   request: { body: { required: true, ...json(z.object({ timezone: Timezone.optional() }), 'Fields to change') } },
   responses: { 200: json(Me, 'The updated profile'), 400: json(ErrorBody, 'Invalid body'), 401: unauthorized },
 });
@@ -361,7 +396,7 @@ const todayRoute = createRoute({
   method: 'get',
   path: '/me/today',
   summary: 'Streak, this week, and today\'s commits, in the caller\'s timezone',
-  security: [{ guest: [] }],
+  security: anyUser,
   responses: { 200: json(TodaySummary, 'Today'), 401: unauthorized },
 });
 
@@ -369,7 +404,7 @@ const yearRoute = createRoute({
   method: 'get',
   path: '/me/year',
   summary: 'The year heatmap: daily verse totals for 53 weeks, and intensity thresholds',
-  security: [{ guest: [] }],
+  security: anyUser,
   request: {
     query: z.object({
       end: z.iso.date().optional().openapi({ description: 'A day in the last week shown. Defaults to the caller\'s today.' }),
@@ -382,7 +417,7 @@ const canonRoute = createRoute({
   method: 'get',
   path: '/me/canon',
   summary: 'How much of the canon the caller has read: per-chapter reads and coverage',
-  security: [{ guest: [] }],
+  security: anyUser,
   responses: { 200: json(Canon, 'The canon'), 401: unauthorized },
 });
 
@@ -390,7 +425,7 @@ const bookReadsRoute = createRoute({
   method: 'get',
   path: '/me/canon/{bookId}',
   summary: 'How often the caller has read each verse of one book',
-  security: [{ guest: [] }],
+  security: anyUser,
   request: {
     params: z.object({
       bookId: z.coerce
@@ -404,18 +439,28 @@ const bookReadsRoute = createRoute({
   responses: { 200: json(BookReads, 'The book'), 400: json(ErrorBody, 'Invalid book'), 401: unauthorized },
 });
 
-export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) {
+export function createApp(deps: Deps, { now = () => new Date(), verifySession = async () => undefined }: Options = {}) {
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
       if (!result.success) return c.json({ error: result.error.issues.map((i) => i.message).join('; ') }, 400);
     },
   }).basePath('/api');
 
-  /** The caller from `Authorization: Guest <token>`, or undefined. */
+  /** The Clerk user id from a valid `Authorization: Bearer <jwt>`, or undefined. */
+  async function clerkUserId(c: Context): Promise<string | undefined> {
+    const jwt = c.req.header('authorization')?.match(/^Bearer\s+(\S+)$/)?.[1];
+    return jwt ? verifySession(jwt) : undefined;
+  }
+
+  /**
+   * The caller from `Authorization: Guest <token>` or `Bearer <clerk jwt>`, or undefined.
+   * A signed-in Clerk user gets a row on their first request.
+   */
   async function caller(c: Context): Promise<User | undefined> {
     const token = c.req.header('authorization')?.match(/^Guest\s+(\S+)$/)?.[1];
-    if (!token) return undefined;
-    return deps.findUserByGuestTokenHash(await hashGuestToken(token));
+    if (token) return deps.findUserByGuestTokenHash(await hashGuestToken(token));
+    const clerkId = await clerkUserId(c);
+    return clerkId ? deps.findOrCreateClerkUser(clerkId, DEFAULT_TIMEZONE) : undefined;
   }
 
   app.openapi(canonTotalsRoute, async (c) => c.json(await deps.getCanonTotals(), 200));
@@ -482,6 +527,14 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
     return c.body(null, 204);
   });
 
+  app.openapi(claimRoute, async (c) => {
+    // Deliberately no row is created here, so a brand-new account adopts the guest.
+    const clerkId = await clerkUserId(c);
+    if (!clerkId) return c.json({ error: 'sign in to claim a guest' }, 401);
+    await deps.claimGuest(clerkId, await hashGuestToken(c.req.valid('json').guestToken));
+    return c.body(null, 204);
+  });
+
   app.openapi(getMeRoute, async (c) => {
     const user = await caller(c);
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
@@ -539,6 +592,12 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
     in: 'header',
     name: 'Authorization',
     description: '`Guest <token>` from POST /api/guests',
+  });
+  app.openAPIRegistry.registerComponent('securitySchemes', 'clerk', {
+    type: 'http',
+    scheme: 'bearer',
+    bearerFormat: 'JWT',
+    description: 'A Clerk session token',
   });
 
   app.doc31('/openapi.json', {

@@ -3,7 +3,8 @@
 import { dayLabel, localDate, parse } from '@biblecommit/core';
 import { useEffect, useRef, useState } from 'react';
 import { useCommit, useDeleteCommit, useRecentCommits, type Commit } from '@/commits';
-import { browserTimezone, useHasGuest } from '@/guest';
+import { browserTimezone } from '@/guest';
+import { useHasUser } from '@/session';
 import { Streak } from './Streak';
 import styles from './Today.module.css';
 import { YearHeatmap } from './YearHeatmap';
@@ -26,7 +27,7 @@ type Outcome = { kind: 'committed' } | { kind: 'failed'; message: string };
 const finePointer = () => typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 export function Today() {
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   const recent = useRecentCommits();
   // The commit that just landed; its row in the recent list washes in.
   const [freshId, setFreshId] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export function Today() {
   const [ink, setInk] = useState<{ key: number; text: string } | null>(null);
 
   const parsed = text.trim() ? parse(text, { today: today() }) : null;
-  const isNew = !hasGuest || (recent.isSuccess && recent.data.length === 0);
+  const isNew = !hasUser || (recent.isSuccess && recent.data.length === 0);
 
   // Desktop: focus on load, and typing anywhere lands in the input.
   useEffect(() => {

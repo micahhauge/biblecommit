@@ -3,7 +3,7 @@
 import { chapterLabel, chapterLevel, getBook, readLabel, verseLabel, verseReads, type ChapterReads } from '@biblecommit/core';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { useHasGuest } from '@/guest';
+import { useHasUser } from '@/session';
 import { useBookReads } from '@/me';
 import { useWidth } from '@/use-width';
 import styles from './BookSheet.module.css';
@@ -71,9 +71,9 @@ export function BookSheet({ bookId, chapters, chapter: initialChapter = null, on
     };
   }, []);
 
-  const hasGuest = useHasGuest();
+  const hasUser = useHasUser();
   const verses = useBookReads(bookId);
-  const bookVerses = hasGuest ? verses.data?.chapters.map((c) => c.verses) : verseReads([], bookId);
+  const bookVerses = hasUser ? verses.data?.chapters.map((c) => c.verses) : verseReads([], bookId);
 
   const read = chapters.filter((c) => c.times >= 1).length;
   const readings = chapters.reduce((sum, c) => sum + c.times, 0);
@@ -144,7 +144,7 @@ export function BookSheet({ bookId, chapters, chapter: initialChapter = null, on
             bookId={bookId}
             chapter={chapter}
             verses={bookVerses?.[chapter - 1]}
-            error={hasGuest && verses.error ? verses.error.message : null}
+            error={hasUser && verses.error ? verses.error.message : null}
             width={width}
             onReadout={setReadout}
           />

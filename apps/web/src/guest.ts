@@ -1,7 +1,5 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
-
 /** The browser's guest token (see spec §4, Guest mode). Created on the first commit, never before. */
 const KEY = 'biblecommit.guestToken';
 const listeners = new Set<() => void>();
@@ -25,7 +23,14 @@ export function setGuestToken(token: string) {
   listeners.forEach((l) => l());
 }
 
-function subscribe(listener: () => void) {
+/** Dropped once the guest is claimed by an account, and on sign-out. */
+export function clearGuestToken() {
+  localStorage.removeItem(KEY);
+  listeners.forEach((l) => l());
+}
+
+/** Calls `listener` whenever the token changes, in this tab or another. */
+export function subscribeGuest(listener: () => void) {
   listeners.add(listener);
   const onStorage = (e: StorageEvent) => e.key === KEY && listener();
   window.addEventListener('storage', onStorage);
@@ -33,9 +38,4 @@ function subscribe(listener: () => void) {
     listeners.delete(listener);
     window.removeEventListener('storage', onStorage);
   };
-}
-
-/** Whether this browser has a guest yet. False on the server. */
-export function useHasGuest(): boolean {
-  return useSyncExternalStore(subscribe, () => getGuestToken() !== null, () => false);
 }

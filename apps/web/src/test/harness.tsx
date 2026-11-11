@@ -1,10 +1,11 @@
 import { createApp, createDbDeps } from '@biblecommit/api';
 import { createTestDb } from '@biblecommit/db/testing';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
+import { act, render } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { afterAll, beforeEach, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { createQueryClient } from '@/query-client';
+import { endSession, startSession } from '@/session';
 
 /**
  * The real API (routes, validation, SQL) on an in-memory Postgres, served to the
@@ -15,7 +16,8 @@ import { createQueryClient } from '@/query-client';
  */
 export async function useTestServer() {
   const t = await createTestDb();
-  const app = createApp(createDbDeps(t.db));
+  // Stands in for Clerk: a session JWT here is "clerk:<clerk user id>".
+  const app = createApp(createDbDeps(t.db), { verifySession: async (jwt) => jwt.match(/^clerk:(.+)$/)?.[1] });
   const requests: string[] = [];
   const failures = new Set<string>();
 
@@ -36,6 +38,8 @@ export async function useTestServer() {
     });
   });
   afterAll(() => t.close());
+  // The session store is module state; leave every test signed out.
+  afterEach(() => endSession(createQueryClient()));
 
   return {
     db: t.db,
@@ -52,5 +56,15 @@ export async function useTestServer() {
 export function renderPage(ui: ReactElement) {
   // Same settings as the app, minus retries so failures surface immediately.
   const client = createQueryClient({ retry: false });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>), client };
+}
+
+/** What Clerk reports on sign-in, as the app's Clerk bridge would pass it on. */
+export function signInAs(clerkUserId: string, client: QueryClient) {
+  return act(() => startSession({ getToken: async () => `clerk:${clerkUserId}` }, client));
+}
+
+/** What Clerk reports on sign-out. */
+export function signOut(client: QueryClient) {
+  return act(() => endSession(client));
 }

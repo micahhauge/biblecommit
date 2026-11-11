@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { isTimezone, localDate, parse, type VerseRange } from '@biblecommit/core';
+import { isTimezone, localDate, parse, streak, weekOf, type VerseRange } from '@biblecommit/core';
 import type { Context } from 'hono';
 import { hashGuestToken, newGuestToken } from './guest-token';
 
@@ -49,10 +49,36 @@ export const Parsed = z
   })
   .openapi('Parsed');
 
+export const ModePref = z.enum(['system', 'dark', 'light']).openapi('ModePref');
+export type ModePref = z.infer<typeof ModePref>;
+
 export interface User {
   id: string;
   timezone: string;
+  modePref: ModePref;
 }
+
+export const Me = z
+  .object({
+    /** IANA timezone; the user's local days (streak, today, readOn defaults) are in it. */
+    timezone: z.string().openapi({ example: 'America/Chicago' }),
+    modePref: ModePref,
+  })
+  .openapi('Me');
+
+export const TodaySummary = z
+  .object({
+    /** The user's local date right now. */
+    today: z.iso.date(),
+    /** Consecutive days with a commit, ending today, or yesterday while today is pending. */
+    streak: z.number().int(),
+    committedToday: z.boolean(),
+    /** Sunday through Saturday of this week; days after today are never committed. */
+    week: z.array(z.object({ date: z.iso.date(), committed: z.boolean() })).length(7),
+    /** Commits that count for today, newest first. */
+    commits: z.array(Commit),
+  })
+  .openapi('TodaySummary');
 
 export interface NewCommit {
   id: string;
@@ -102,6 +128,11 @@ export interface Deps {
    * With `after`, only commits strictly after that position in this order.
    */
   listCommits(userId: string, limit: number, after?: CommitPosition): Promise<Commit[]>;
+  /** The user's non-deleted commits that count for one local date, newest first. */
+  listCommitsOn(userId: string, readOn: string): Promise<Commit[]>;
+  /** Every distinct `readOn` among the user's non-deleted commits. */
+  listReadDays(userId: string): Promise<string[]>;
+  updateUser(userId: string, changes: { timezone?: string }): Promise<void>;
   /**
    * Soft-deletes one of the user's commits by setting `deleted_at`. Returns false if the
    * commit doesn't exist, isn't theirs, or is already deleted.
@@ -243,6 +274,32 @@ const deleteCommitRoute = createRoute({
   },
 });
 
+const getMeRoute = createRoute({
+  method: 'get',
+  path: '/me',
+  summary: 'The caller\'s profile and preferences',
+  security: [{ guest: [] }],
+  responses: { 200: json(Me, 'Profile'), 401: unauthorized },
+});
+
+const patchMeRoute = createRoute({
+  method: 'patch',
+  path: '/me',
+  summary: 'Update the caller\'s timezone',
+  description: 'Clients send the browser/device timezone on load when it differs from the stored one.',
+  security: [{ guest: [] }],
+  request: { body: { required: true, ...json(z.object({ timezone: Timezone.optional() }), 'Fields to change') } },
+  responses: { 200: json(Me, 'The updated profile'), 400: json(ErrorBody, 'Invalid body'), 401: unauthorized },
+});
+
+const todayRoute = createRoute({
+  method: 'get',
+  path: '/me/today',
+  summary: 'Streak, this week, and today\'s commits, in the caller\'s timezone',
+  security: [{ guest: [] }],
+  responses: { 200: json(TodaySummary, 'Today'), 401: unauthorized },
+});
+
 export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) {
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
@@ -319,6 +376,31 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
     const deleted = await deps.deleteCommit(user.id, c.req.valid('param').id, now());
     if (!deleted) return c.json({ error: 'no such commit' }, 404);
     return c.body(null, 204);
+  });
+
+  app.openapi(getMeRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    return c.json({ timezone: user.timezone, modePref: user.modePref }, 200);
+  });
+
+  app.openapi(patchMeRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const { timezone } = c.req.valid('json');
+    if (timezone !== undefined && timezone !== user.timezone) await deps.updateUser(user.id, { timezone });
+    return c.json({ timezone: timezone ?? user.timezone, modePref: user.modePref }, 200);
+  });
+
+  app.openapi(todayRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const today = localDate(now(), user.timezone);
+    const [days, commits] = await Promise.all([deps.listReadDays(user.id), deps.listCommitsOn(user.id, today)]);
+    const read = new Set(days);
+    const { length, committedToday } = streak(read, today);
+    const week = weekOf(today).map((date) => ({ date, committed: date <= today && read.has(date) }));
+    return c.json({ today, streak: length, committedToday, week, commits }, 200);
   });
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'guest', {

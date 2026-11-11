@@ -1,6 +1,6 @@
 import { canonTotals, commitRanges, commits, createDb, users, type Db } from '@biblecommit/db';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
-import type { Commit, Deps } from './app';
+import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import type { Commit, Deps, ModePref } from './app';
 
 /** Database-backed deps. The connection is created on first use, so importing this never needs DATABASE_URL. */
 export function createDbDeps(provided?: Db): Deps {
@@ -8,6 +8,26 @@ export function createDbDeps(provided?: Db): Deps {
   const db = () => (cached ??= createDb());
 
   const totalVerses = sql<number>`coalesce(sum(${commitRanges.endVerseId} - ${commitRanges.startVerseId} + 1), 0)`.mapWith(Number);
+
+  /** The user's non-deleted commits matching `where`, in recent-list order. */
+  async function selectCommits(userId: string, where: SQL | undefined, limit?: number): Promise<Commit[]> {
+    const query = db()
+      .select({
+        id: commits.id,
+        readOn: commits.readOn,
+        rawInput: commits.rawInput,
+        display: commits.display,
+        verseCount: totalVerses,
+        createdAt: commits.createdAt,
+      })
+      .from(commits)
+      .leftJoin(commitRanges, eq(commitRanges.commitId, commits.id))
+      .where(and(eq(commits.userId, userId), isNull(commits.deletedAt), where))
+      .groupBy(commits.id)
+      .orderBy(desc(commits.readOn), desc(commits.createdAt), desc(commits.id));
+    const rows = await (limit === undefined ? query : query.limit(limit));
+    return rows.map((r): Commit => ({ ...r, createdAt: r.createdAt.toISOString() }));
+  }
 
   return {
     getCanonTotals: () => canonTotals(db()),
@@ -19,10 +39,10 @@ export function createDbDeps(provided?: Db): Deps {
 
     async findUserByGuestTokenHash(tokenHash) {
       const [row] = await db()
-        .select({ id: users.id, timezone: users.timezone })
+        .select({ id: users.id, timezone: users.timezone, modePref: users.modePref })
         .from(users)
         .where(eq(users.guestTokenHash, tokenHash));
-      return row;
+      return row && { ...row, modePref: row.modePref as ModePref };
     },
 
     async createCommit({ id, userId, readOn, rawInput, display, createdAt, ranges, verseCount }) {
@@ -42,30 +62,27 @@ export function createDbDeps(provided?: Db): Deps {
       return { id, readOn, rawInput, display, verseCount, createdAt: createdAt.toISOString() };
     },
 
-    async listCommits(userId, limit, after) {
+    listCommits: (userId, limit, after) =>
+      selectCommits(
+        userId,
+        after &&
+          sql`(${commits.readOn}, ${commits.createdAt}, ${commits.id}) < (${after.readOn}::date, ${after.createdAt}::timestamptz, ${after.id}::uuid)`,
+        limit,
+      ),
+
+    listCommitsOn: (userId, readOn) => selectCommits(userId, eq(commits.readOn, readOn)),
+
+    async listReadDays(userId) {
       const rows = await db()
-        .select({
-          id: commits.id,
-          readOn: commits.readOn,
-          rawInput: commits.rawInput,
-          display: commits.display,
-          verseCount: totalVerses,
-          createdAt: commits.createdAt,
-        })
+        .selectDistinct({ readOn: commits.readOn })
         .from(commits)
-        .leftJoin(commitRanges, eq(commitRanges.commitId, commits.id))
-        .where(
-          and(
-            eq(commits.userId, userId),
-            isNull(commits.deletedAt),
-            after &&
-              sql`(${commits.readOn}, ${commits.createdAt}, ${commits.id}) < (${after.readOn}::date, ${after.createdAt}::timestamptz, ${after.id}::uuid)`,
-          ),
-        )
-        .groupBy(commits.id)
-        .orderBy(desc(commits.readOn), desc(commits.createdAt), desc(commits.id))
-        .limit(limit);
-      return rows.map((r): Commit => ({ ...r, createdAt: r.createdAt.toISOString() }));
+        .where(and(eq(commits.userId, userId), isNull(commits.deletedAt)));
+      return rows.map((r) => r.readOn);
+    },
+
+    async updateUser(userId, { timezone }) {
+      if (timezone === undefined) return;
+      await db().update(users).set({ timezone }).where(eq(users.id, userId));
     },
 
     async deleteCommit(userId, id, deletedAt) {

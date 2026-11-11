@@ -4,6 +4,7 @@ import { dayLabel, localDate, parse } from '@biblecommit/core';
 import { useEffect, useRef, useState } from 'react';
 import { useCommit, useDeleteCommit, useRecentCommits, type Commit } from '@/commits';
 import { browserTimezone, useHasGuest } from '@/guest';
+import { Streak } from './Streak';
 import styles from './Today.module.css';
 
 const EXAMPLES = ['john 1', 'psalm 23', 'gen 1-3'];
@@ -163,6 +164,8 @@ export function Today() {
           </div>
         )}
       </section>
+
+      <Streak />
 
       {undoable && <UndoToast key={undoable.id} commit={undoable} onUndo={() => deleteCommit(undoable.id)} onExpire={() => setUndoable(null)} />}
 

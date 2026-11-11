@@ -79,7 +79,9 @@ describe('committing', () => {
     expect(input()).toHaveValue('');
     expect(preview()).toHaveTextContent('committed.');
     expect(screen.queryByRole('group', { name: /examples/i })).toBeNull();
-    expect(server.requests).toEqual(['POST /api/guests', 'POST /api/commits']);
+    expect(server.requests.slice(0, 2)).toEqual(['POST /api/guests', 'POST /api/commits']);
+    // The new guest's first fetch is the streak; the recent list was seeded from the commit.
+    await waitFor(() => expect(server.requests.slice(2)).toEqual(['GET /api/me/today']));
   });
 
   it('reuses the guest for later commits', async () => {
@@ -272,7 +274,7 @@ describe('load more', () => {
     await waitFor(async () => expect(await passages()).toHaveLength(12));
     expect((await passages()).at(-1)).toBe('Genesis 12');
     expect(screen.queryByRole('button', { name: 'load more' })).toBeNull();
-    expect(server.requests).toEqual(['GET /api/commits', 'GET /api/commits']);
+    expect(server.requests.filter((r) => r.startsWith('GET /api/commits'))).toEqual(['GET /api/commits', 'GET /api/commits']);
   });
 
   it('has no "load more" when everything fits', async () => {
@@ -280,5 +282,91 @@ describe('load more', () => {
     renderPage(<Today />);
     await waitFor(async () => expect(await passages()).toHaveLength(3));
     expect(screen.queryByRole('button', { name: 'load more' })).toBeNull();
+  });
+});
+
+describe('the streak', () => {
+  const streakNumber = () => screen.getByTestId('streak');
+  const status = () => screen.getByTestId('streak-status');
+  /** Labels of this week's days that are committed, Sunday first. */
+  const committedDays = () =>
+    within(screen.getByRole('list', { name: 'this week' }))
+      .getAllByRole('listitem')
+      .map((li) => li.getAttribute('aria-label')!)
+      .filter((l) => l.endsWith('committed'));
+
+  /** A returning guest whose commits are already on the server: Genesis 1 on the first date, Genesis 2 on the next, … */
+  async function returningGuest(...readOns: string[]) {
+    const { data } = await api.POST('/api/guests', { body: { timezone: 'America/Chicago' } });
+    const authorization = guestAuthorization(data!.token);
+    for (const [i, readOn] of readOns.entries()) {
+      await api.POST('/api/commits', { body: { text: `gen ${i + 1}`, readOn }, headers: { authorization } });
+    }
+    setGuestToken(data!.token);
+    server.requests.length = 0;
+  }
+
+  it('starts at zero with an empty week for a new visitor, without fetching', async () => {
+    renderPage(<Today />);
+    expect(streakNumber()).toHaveTextContent('0');
+    expect(status()).toHaveTextContent('commit one passage to begin');
+    const days = within(screen.getByRole('list', { name: 'this week' })).getAllByRole('listitem');
+    // Monday, Nov 9 in Chicago.
+    expect(days.map((d) => d.getAttribute('aria-label'))).toEqual([
+      'sunday',
+      'monday (today)',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+    ]);
+    expect(server.requests).toEqual([]);
+  });
+
+  it('shows a returning guest\'s streak with today pending', async () => {
+    await returningGuest('2026-11-06', '2026-11-07', '2026-11-08');
+    renderPage(<Today />);
+    await waitFor(() => expect(streakNumber()).toHaveTextContent('3'));
+    expect(status()).toHaveTextContent('nothing committed yet today');
+    expect(committedDays()).toEqual(['sunday, committed']);
+  });
+
+  it('goes up on a commit and back down on undo, without a reload', async () => {
+    await returningGuest('2026-11-08');
+    const user = userEvent.setup();
+    renderPage(<Today />);
+    await waitFor(() => expect(streakNumber()).toHaveTextContent('1'));
+
+    await commitAll(user, 'john 3');
+    await waitFor(() => expect(streakNumber()).toHaveTextContent('2'));
+    expect(status()).toHaveTextContent('committed today');
+    expect(committedDays()).toEqual(['sunday, committed', 'monday (today), committed']);
+
+    await user.click(await screen.findByRole('button', { name: 'undo' }));
+    await waitFor(() => expect(status()).toHaveTextContent('nothing committed yet today'));
+    expect(streakNumber()).toHaveTextContent('1');
+    expect(committedDays()).toEqual(['sunday, committed']);
+  });
+
+  it('starts counting on a new visitor\'s first commit', async () => {
+    const user = userEvent.setup();
+    renderPage(<Today />);
+    await commitAll(user, 'psalm 23');
+    await waitFor(() => expect(streakNumber()).toHaveTextContent('1'));
+    expect(status()).toHaveTextContent('committed today');
+  });
+
+  it('drops when a commit is deleted from the recent list', async () => {
+    await returningGuest('2026-11-07', '2026-11-08');
+    const user = userEvent.setup();
+    renderPage(<Today />);
+    await waitFor(() => expect(streakNumber()).toHaveTextContent('2'));
+
+    // Genesis 2 is yesterday's only commit: without it, the run is gone.
+    await user.click(await screen.findByRole('button', { name: 'delete Genesis 2' }));
+    await user.click(screen.getByRole('button', { name: 'yes' }));
+    await waitFor(() => expect(streakNumber()).toHaveTextContent('0'));
+    expect(committedDays()).toEqual([]);
   });
 });

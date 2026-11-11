@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from
 import { api } from '@/api/client';
 import type { components } from '@/api/schema';
 import { browserTimezone, getGuestToken, guestAuthorization, setGuestToken, useHasGuest } from '@/guest';
+import { todayKey } from '@/me';
 
 export type Commit = components['schemas']['Commit'];
 type Page = components['schemas']['CommitList'];
@@ -64,7 +65,10 @@ export function useCommit({ onSaved }: { onSaved?: (commit: Commit) => void } = 
       if (existing) {
         const commit = await postCommit(text, existing);
         onSaved?.(commit);
-        await queryClient.invalidateQueries({ queryKey: recentKey });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: recentKey }),
+          queryClient.invalidateQueries({ queryKey: todayKey }),
+        ]);
         return commit;
       }
 
@@ -74,6 +78,7 @@ export function useCommit({ onSaved }: { onSaved?: (commit: Commit) => void } = 
         onSaved?.(commit);
         // Seed the list before storing the token: storing it enables the recent-commits
         // query, and seeding first saves a request and keeps the example chips from flashing back.
+        // The streak query is enabled by the same token and fetches fresh.
         queryClient.setQueryData<Recent>(recentKey, { pages: [{ commits: [commit], nextCursor: null }], pageParams: [null] });
         return commit;
       } finally {
@@ -132,6 +137,7 @@ export function useDeleteCommit() {
         },
       );
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: recentKey }),
+    onSettled: () =>
+      Promise.all([queryClient.invalidateQueries({ queryKey: recentKey }), queryClient.invalidateQueries({ queryKey: todayKey })]),
   });
 }

@@ -283,3 +283,103 @@ describe('DELETE /api/commits/:id', () => {
     expect((await del('not-a-uuid', auth)).status).toBe(400);
   });
 });
+
+describe('GET /api/me and PATCH /api/me', () => {
+  function patch(body: unknown, auth: Record<string, string>) {
+    return app.request('/api/me', { method: 'PATCH', body: JSON.stringify(body), headers: { 'content-type': 'application/json', ...auth } });
+  }
+
+  it('returns the caller\'s timezone and mode', async () => {
+    const auth = await newGuest('America/Chicago');
+    const res = await app.request('/api/me', { headers: auth });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ timezone: 'America/Chicago', modePref: 'system' });
+  });
+
+  it('updates the timezone, which then decides the user\'s local day', async () => {
+    const auth = await newGuest('America/Chicago');
+    const res = await patch({ timezone: 'Asia/Tokyo' }, auth);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ timezone: 'Asia/Tokyo', modePref: 'system' });
+    expect(await (await app.request('/api/me', { headers: auth })).json()).toMatchObject({ timezone: 'Asia/Tokyo' });
+    // Nov 10 already in Tokyo.
+    expect(await (await post('/api/commits', { text: 'gen 1' }, auth)).json()).toMatchObject({ readOn: '2026-11-10' });
+  });
+
+  it('rejects an unknown timezone and requires a guest token', async () => {
+    const auth = await newGuest();
+    expect((await patch({ timezone: 'Mars/Olympus' }, auth)).status).toBe(400);
+    expect((await patch({ timezone: 'UTC' }, {})).status).toBe(401);
+    expect((await app.request('/api/me')).status).toBe(401);
+  });
+});
+
+describe('GET /api/me/today', () => {
+  async function today(auth: Record<string, string>) {
+    const res = await app.request('/api/me/today', { headers: auth });
+    expect(res.status).toBe(200);
+    return res.json();
+  }
+  const commitOn = (auth: Record<string, string>, readOn: string, text = 'gen 1') => post('/api/commits', { text, readOn }, auth);
+
+  it('is an empty week and no streak for a new guest', async () => {
+    const auth = await newGuest('America/Chicago');
+    expect(await today(auth)).toEqual({
+      // Still Monday, Nov 9 in Chicago.
+      today: '2026-11-09',
+      streak: 0,
+      committedToday: false,
+      week: ['08', '09', '10', '11', '12', '13', '14'].map((d) => ({ date: `2026-11-${d}`, committed: false })),
+      commits: [],
+    });
+  });
+
+  it('counts the run ending today, with today\'s commits and this week\'s days', async () => {
+    const auth = await newGuest('America/Chicago');
+    for (const d of ['2026-11-04', '2026-11-06', '2026-11-07', '2026-11-08']) await commitOn(auth, d);
+    await post('/api/commits', { text: 'john 3' }, auth);
+    now = new Date(now.getTime() + 1000);
+    await post('/api/commits', { text: 'ruth' }, auth);
+
+    const body = await today(auth);
+    expect(body).toMatchObject({ today: '2026-11-09', streak: 4, committedToday: true });
+    expect(body.week.filter((d: { committed: boolean }) => d.committed).map((d: { date: string }) => d.date)).toEqual(['2026-11-08', '2026-11-09']);
+    expect(body.commits.map((c: { display: string }) => c.display)).toEqual(['Ruth', 'John 3']);
+  });
+
+  it('keeps the streak while today is pending, and loses it after a missed day', async () => {
+    const auth = await newGuest('America/Chicago');
+    await commitOn(auth, '2026-11-07');
+    await commitOn(auth, '2026-11-08');
+    expect(await today(auth)).toMatchObject({ streak: 2, committedToday: false, commits: [] });
+
+    // A day later with nothing on Nov 9: broken.
+    now = new Date(now.getTime() + 24 * 3600_000);
+    expect(await today(auth)).toMatchObject({ today: '2026-11-10', streak: 0 });
+  });
+
+  it('leaves out deleted commits', async () => {
+    const auth = await newGuest('America/Chicago');
+    await commitOn(auth, '2026-11-08');
+    const { id } = await (await post('/api/commits', { text: 'gen 2' }, auth)).json();
+    expect(await today(auth)).toMatchObject({ streak: 2, committedToday: true });
+
+    await app.request(`/api/commits/${id}`, { method: 'DELETE', headers: auth });
+    expect(await today(auth)).toMatchObject({ streak: 1, committedToday: false, commits: [] });
+  });
+
+  it('uses the caller\'s timezone for today', async () => {
+    const auth = await newGuest('Asia/Tokyo');
+    await commitOn(auth, '2026-11-09');
+    // 03:00 UTC is Nov 10 in Tokyo: Nov 9 is yesterday, today pending.
+    expect(await today(auth)).toMatchObject({ today: '2026-11-10', streak: 1, committedToday: false });
+  });
+
+  it('only counts the caller\'s commits, and requires a guest token', async () => {
+    const auth = await newGuest();
+    const other = await newGuest();
+    await post('/api/commits', { text: 'gen 1' }, other);
+    expect(await today(auth)).toMatchObject({ streak: 0, commits: [] });
+    expect((await app.request('/api/me/today')).status).toBe(401);
+  });
+});

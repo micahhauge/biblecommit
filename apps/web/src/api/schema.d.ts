@@ -178,10 +178,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Recent commits, newest first */
+        /** Recent commits, newest first, a page at a time */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description `nextCursor` from the previous page; omit for the first page */
+                    cursor?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -195,6 +198,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["CommitList"];
+                    };
+                };
+                /** @description Malformed cursor */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
                     };
                 };
                 /** @description Missing or unknown credentials */
@@ -273,6 +285,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/commits/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a commit (soft). Powers undo and the delete in the recent list. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid id */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description Missing or unknown credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description No such commit for this user, or already deleted */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -320,6 +395,7 @@ export interface components {
         };
         CommitList: {
             commits: components["schemas"]["Commit"][];
+            nextCursor: string | null;
         };
     };
     responses: never;

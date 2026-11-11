@@ -27,7 +27,11 @@ export async function useTestServer() {
       const req = new Request(input, init);
       const call = `${req.method} ${new URL(req.url).pathname}`;
       requests.push(call);
-      if (failures.delete(call)) throw new TypeError('Failed to fetch');
+      const failure = [...failures].find((f) => call === f || call.startsWith(`${f}/`));
+      if (failure) {
+        failures.delete(failure);
+        throw new TypeError('Failed to fetch');
+      }
       return app.request(req);
     });
   });
@@ -36,7 +40,10 @@ export async function useTestServer() {
   return {
     db: t.db,
     requests,
-    /** Make the next matching call (e.g. "POST /api/commits") fail as if the network dropped. */
+    /**
+     * Make the next matching call fail as if the network dropped. Matches the exact call
+     * ("POST /api/commits") or anything under it ("DELETE /api/commits" matches "DELETE /api/commits/<id>").
+     */
     failNext: (call: string) => failures.add(call),
   };
 }

@@ -1,5 +1,5 @@
 import { canonTotals, commitRanges, commits, createDb, users, type Db } from '@biblecommit/db';
-import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, between, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { Commit, Deps, ModePref } from './app';
 
 /** Database-backed deps. The connection is created on first use, so importing this never needs DATABASE_URL. */
@@ -78,6 +78,15 @@ export function createDbDeps(provided?: Db): Deps {
         .from(commits)
         .where(and(eq(commits.userId, userId), isNull(commits.deletedAt)));
       return rows.map((r) => r.readOn);
+    },
+
+    async dailyVerses(userId, from, to) {
+      return db()
+        .select({ readOn: commits.readOn, verses: totalVerses })
+        .from(commits)
+        .innerJoin(commitRanges, eq(commitRanges.commitId, commits.id))
+        .where(and(eq(commits.userId, userId), isNull(commits.deletedAt), between(commits.readOn, from, to)))
+        .groupBy(commits.readOn);
     },
 
     async updateUser(userId, { timezone }) {

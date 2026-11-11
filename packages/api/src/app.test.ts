@@ -383,3 +383,66 @@ describe('GET /api/me/today', () => {
     expect((await app.request('/api/me/today')).status).toBe(401);
   });
 });
+
+describe('GET /api/me/year', () => {
+  async function year(auth: Record<string, string>, query = '') {
+    const res = await app.request(`/api/me/year${query}`, { headers: auth });
+    expect(res.status).toBe(200);
+    return res.json() as Promise<{ today: string; days: Array<{ date: string; verses: number }>; thresholds: number[] }>;
+  }
+  const commitOn = (auth: Record<string, string>, readOn: string, text: string) => post('/api/commits', { text, readOn }, auth);
+  const versesOn = (days: Array<{ date: string; verses: number }>, date: string) => days.find((d) => d.date === date)?.verses;
+
+  it('is 371 empty days ending with this week, with the fixed thresholds, for a new guest', async () => {
+    const auth = await newGuest('America/Chicago');
+    const body = await year(auth);
+    expect(body.today).toBe('2026-11-09');
+    expect(body.days).toHaveLength(371);
+    expect(body.days[0]!.date).toBe('2025-11-09');
+    expect(body.days.at(-1)!.date).toBe('2026-11-14');
+    expect(body.days.every((d) => d.verses === 0)).toBe(true);
+    expect(body.thresholds).toEqual([1, 11, 31, 81]);
+  });
+
+  it('totals each day\'s verses, counting repeats', async () => {
+    const auth = await newGuest('America/Chicago');
+    await commitOn(auth, '2026-11-09', 'john 3'); // 36
+    await commitOn(auth, '2026-11-09', 'john 3:16'); // the same verse again: +1
+    await commitOn(auth, '2026-11-02', 'gen 1, ps 23'); // 31 + 6
+    const { days } = await year(auth);
+    expect(versesOn(days, '2026-11-09')).toBe(37);
+    expect(versesOn(days, '2026-11-02')).toBe(37);
+    expect(days.filter((d) => d.verses > 0)).toHaveLength(2);
+  });
+
+  it('buckets by quartiles of the window\'s reading days once there are 8', async () => {
+    const auth = await newGuest('America/Chicago');
+    // Day i reads i verses.
+    for (let i = 1; i <= 8; i++) await commitOn(auth, `2026-10-0${i}`, `ps 119:1-${i}`);
+    expect((await year(auth)).thresholds).toEqual([1, 3, 5, 7]);
+    // A day outside the window doesn't move them.
+    await commitOn(auth, '2025-01-01', 'ps 119');
+    expect((await year(auth)).thresholds).toEqual([1, 3, 5, 7]);
+  });
+
+  it('shows the 53 weeks around `end`', async () => {
+    const auth = await newGuest('America/Chicago');
+    await commitOn(auth, '2025-01-01', 'ruth 1');
+    const { today, days } = await year(auth, '?end=2025-01-01');
+    expect(today).toBe('2026-11-09');
+    expect(days.at(-1)!.date).toBe('2025-01-04');
+    expect(versesOn(days, '2025-01-01')).toBe(22);
+    expect((await app.request('/api/me/year?end=nope', { headers: auth })).status).toBe(400);
+  });
+
+  it('leaves out deleted commits and other users\' commits, and requires a guest token', async () => {
+    const auth = await newGuest('America/Chicago');
+    const other = await newGuest('America/Chicago');
+    await commitOn(other, '2026-11-09', 'gen 1');
+    const { id } = await (await commitOn(auth, '2026-11-08', 'gen 2')).json();
+    expect(versesOn((await year(auth)).days, '2026-11-08')).toBe(25);
+    await app.request(`/api/commits/${id}`, { method: 'DELETE', headers: auth });
+    expect((await year(auth)).days.every((d) => d.verses === 0)).toBe(true);
+    expect((await app.request('/api/me/year')).status).toBe(401);
+  });
+});

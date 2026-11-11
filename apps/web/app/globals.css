@@ -172,6 +172,16 @@ h2 {
   letter-spacing: 0.2em;
   color: var(--dim);
   margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+h2 em {
+  font-style: normal;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+  text-align: right;
 }
 section {
   margin-bottom: 76px;

@@ -35,6 +35,16 @@
 .bk {
   font-family: var(--serif), serif;
   fill: var(--dim);
+  cursor: pointer;
+  outline: none;
+}
+.bk:hover,
+.bk:focus-visible {
+  fill: var(--ink);
+  text-decoration: underline;
+}
+.c {
+  cursor: pointer;
 }
 .sec {
   font-family: var(--mono), monospace;

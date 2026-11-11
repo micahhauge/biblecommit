@@ -1,4 +1,4 @@
-import { CHAPTERS, getBook, TOTAL_CHAPTERS, TOTAL_VERSES } from './canon';
+import { CHAPTERS, getBook, getChapter, TOTAL_CHAPTERS, TOTAL_VERSES } from './canon';
 import type { VerseRange } from './parse';
 
 /** How much of one chapter has been read. */
@@ -75,4 +75,45 @@ export function coverage(reads: readonly ChapterReads[]): Coverage {
   const chaptersRead = reads.filter((r) => r.times >= 1).length;
   const readMoreThanOnce = reads.filter((r) => r.times >= 2).length;
   return { chaptersRead, readMoreThanOnce, coverage: chaptersRead / TOTAL_CHAPTERS };
+}
+
+/**
+ * Reads of every verse in one book, from every verse range a reader has committed
+ * (all time, repeats counted). `[c][v]` is the read count of chapter `c + 1`, verse `v + 1`.
+ * Ranges outside the book are ignored; an unknown book has no chapters.
+ */
+export function verseReads(ranges: Iterable<VerseRange>, bookId: number): number[][] {
+  const book = getBook(bookId);
+  if (!book) return [];
+  const first = book.firstVerseId;
+  const length = book.lastVerseId - first + 1;
+  const delta = new Int32Array(length + 1);
+  for (const { start, end } of ranges) {
+    const s = Math.max(start, first);
+    const e = Math.min(end, book.lastVerseId);
+    if (s > e) continue;
+    delta[s - first]!++;
+    delta[e - first + 1]!--;
+  }
+  const reads: number[][] = [];
+  let count = 0;
+  let i = 0;
+  for (const chapter of CHAPTERS.slice(chapterOffset(bookId), chapterOffset(bookId) + book.chapterCount)) {
+    const verses: number[] = [];
+    for (let v = 0; v < chapter.verseCount; v++, i++) verses.push((count += delta[i]!));
+    reads.push(verses);
+  }
+  return reads;
+}
+
+/** Index into CHAPTERS of a book's first chapter. */
+function chapterOffset(bookId: number): number {
+  return getChapter(bookId, 1)!.id - 1;
+}
+
+/** "Genesis 12:3", "Psalm 23:1", or "Jude 3" for a single-chapter book. */
+export function verseLabel(bookId: number, chapter: number, verse: number): string {
+  const book = getBook(bookId);
+  if (!book) return '';
+  return book.chapterCount === 1 ? `${book.name} ${verse}` : `${chapterLabel(bookId, chapter)}:${verse}`;
 }

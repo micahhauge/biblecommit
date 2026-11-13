@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>biblecommit — Open Book, Committed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+<style>
+  .dark  { --paper: #0f1115; --ink: #d9d4c7; --pig: 127 152 209; }
+  .light { --paper: #f2ede3; --ink: #1c1a17; --pig: 36 54 95; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0c0f; color: #d9d4c7; font-family: 'EB Garamond', Georgia, serif; padding: 56px 44px 96px; }
+  header, h2, .grid, .lockups { max-width: 1240px; margin-left: auto; margin-right: auto; }
+  header { margin-bottom: 40px; }
+  header h1 { font-weight: 400; font-size: 44px; }
+  header h1 em { color: rgb(127 152 209); }
+  header p { font-family: 'JetBrains Mono', monospace; font-weight: 300; font-size: 13px; opacity: .55; margin-top: 8px; }
+  h2 { margin-top: 56px; margin-bottom: 18px; font-family: 'JetBrains Mono', monospace; font-weight: 400; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; opacity: .5; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+  .card { border: 1px solid #23262d; border-radius: 14px; overflow: hidden; background: #111318; }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; }
+  .pane { background: var(--paper); color: var(--ink); height: 220px; display: grid; place-items: center; position: relative; }
+  .pane svg.mark { width: 112px; height: 112px; }
+  .sizes { position: absolute; left: 12px; right: 12px; bottom: 10px; display: flex; gap: 10px; align-items: flex-end; }
+  .sizes svg { display: block; }
+  .meta { padding: 16px 18px 18px; }
+  .meta h3 { font-weight: 500; font-size: 21px; }
+  .meta h3 span { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 400; opacity: .45; margin-right: 8px; vertical-align: 3px; }
+  .meta p { font-size: 16px; line-height: 1.4; opacity: .7; margin-top: 4px; }
+
+  .lockups { display: grid; grid-template-columns: repeat(auto-fill, minmax(580px, 1fr)); gap: 20px; }
+  .lockups .pane { height: 170px; }
+  .lu { display: flex; align-items: center; gap: 14px; font-size: 36px; white-space: nowrap; }
+  .lu svg { width: 52px; height: 52px; }
+  .lu i { color: rgb(var(--pig)); }
+  .lu.stack { flex-direction: column; gap: 6px; font-size: 30px; }
+  .lu.stack svg { width: 64px; height: 64px; }
+  /* wordmark treatments */
+  .w1 i { margin-left: .07em; }                                   /* kerned gap */
+  .w3 em { font-style: normal; color: rgb(var(--pig)); }          /* upright, colour only */
+  .w4 .cell { display: inline-block; width: .26em; height: .26em; background: rgb(var(--pig)); border-radius: 2px; margin: 0 .14em; transform: translateY(-.06em); }
+  .w5 { font-variant: small-caps; letter-spacing: .04em; }
+  .w5 i { font-style: normal; color: rgb(var(--pig)); }
+  .meta .sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: .45; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Open Book, <em>Committed</em></h1>
+  <p>variations on mark 03 · dark + light · favicon checks at 48 / 32 / 24 / 16px</p>
+</header>
+
+<h2>Variations</h2>
+<div class="grid" id="marks"></div>
+
+<h2>Wordmark options · with 3b Two Commits</h2>
+<div class="lockups" id="lockups"></div>
+
+<script>
+const PIG = a => `rgb(var(--pig) / ${a})`;
+const INK = 'var(--ink)';
+const PAPER = 'var(--paper)';
+
+const LEFT  = 'M50 26 C40 18 24 16 8 19 V77 C24 74 40 76 50 84';
+const RIGHT = 'M50 26 C60 18 76 16 92 19 V77 C76 74 60 76 50 84';
+const pages = (w = 4.5, color = INK) =>
+  `<g fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"><path d="${LEFT}"/><path d="${RIGHT}"/></g>`;
+const spine = (y1, y2, w = 4.5) =>
+  `<line x1="50" y1="${y1}" x2="50" y2="${y2}" stroke="${PIG(1)}" stroke-width="${w}" stroke-linecap="round"/>`;
+const node = (cy, r = 7, sw = 3.5) =>
+  `<circle cx="50" cy="${cy}" r="${r}" fill="${PIG(1)}" stroke="${PAPER}" stroke-width="${sw}"/>`;
+
+const MARKS = [
+  {
+    name: 'Original',
+    note: 'As first drawn: outlined pages, the spine as a commit line, three commits down the gutter. Gets busy below 24px.',
+    svg: () => pages() + spine(10, 94) + node(34) + node(55) + node(76),
+  },
+  {
+    name: 'Two Commits',
+    note: 'Two large nodes in the gutter. Calm, still unmistakably a commit history, and it keeps its shape at 16px.',
+    svg: () => pages() + spine(12, 92) + node(41, 9, 4) + node(65, 9, 4),
+  },
+  {
+    name: 'Next Commit',
+    note: 'The line runs up out of the book to an empty node: what you read so far is filled in, the next reading is still open.',
+    svg: () => pages() + spine(14, 84) +
+      `<circle cx="50" cy="11" r="6.5" fill="${PAPER}" stroke="${PIG(1)}" stroke-width="4"/>` +
+      node(44) + node(66),
+  },
+  {
+    name: 'Ribbon',
+    note: 'The commit line hangs out of the bottom of the book as the Bible\'s silk ribbon marker. Two ideas in one stroke.',
+    svg: () => pages() + spine(10, 80) + node(34) + node(56) +
+      `<path d="M45.5 78 H54.5 V99 L50 93.5 L45.5 99 Z" fill="${PIG(1)}"/>`,
+  },
+  {
+    name: 'Solid Pages',
+    note: 'Pages filled with pigment, the gutter knocked out, commits as notches. Heavier and more iconic; strong as an app icon.',
+    svg: () =>
+      `<g fill="${PIG(1)}"><path d="${LEFT} Z"/><path d="${RIGHT} Z"/></g>` +
+      `<line x1="50" y1="18" x2="50" y2="90" stroke="${PAPER}" stroke-width="5"/>` +
+      `<g fill="${PAPER}"><circle cx="50" cy="38" r="7.5"/><circle cx="50" cy="62" r="7.5"/></g>` +
+      `<g fill="${PIG(1)}"><circle cx="50" cy="38" r="3"/><circle cx="50" cy="62" r="3"/></g>`,
+  },
+  {
+    name: 'Read Lines',
+    note: 'Lines of text on each page, some inked in pigment (read), some faint (not yet). A tiny heatmap inside the book.',
+    svg: () => {
+      const lines = [[34, 1, .18], [44, 1, .18], [54, 1, .18], [64, .35, .18]];
+      let s = pages();
+      lines.forEach(([y, l, r]) => {
+        s += `<line x1="16" y1="${y}" x2="41" y2="${y}" stroke="${PIG(l)}" stroke-width="4" stroke-linecap="round"/>`;
+        s += `<line x1="59" y1="${y}" x2="84" y2="${y}" stroke="${y < 40 ? PIG(1) : `color-mix(in srgb, var(--ink) 22%, transparent)`}" stroke-width="4" stroke-linecap="round"/>`;
+      });
+      return s + spine(12, 92) + node(40) + node(62);
+    },
+  },
+  {
+    name: 'Branch & Merge',
+    note: 'A git branch leaves the spine, crosses the right page and merges back. Most "git"; best kept for large sizes.',
+    svg: () => pages(4) + spine(10, 94) +
+      `<path d="M50 72 C50 62 70 64 70 54 V46 C70 36 50 38 50 30" fill="none" stroke="${PIG(1)}" stroke-width="4.5" stroke-linecap="round"/>` +
+      `<circle cx="70" cy="50" r="6" fill="${PAPER}" stroke="${PIG(1)}" stroke-width="4"/>` +
+      node(30) + node(72),
+  },
+  {
+    name: 'Bold (small sizes)',
+    note: 'Heavier strokes and a simpler book, drawn for favicons and tab bars. Can sit alongside any of the others as the small version.',
+    svg: () =>
+      `<g fill="none" stroke="${INK}" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M50 28 C38 20 22 19 8 22 V78 C22 75 38 77 50 85"/>
+        <path d="M50 28 C62 20 78 19 92 22 V78 C78 75 62 77 50 85"/></g>` +
+      spine(10, 94, 8) + node(42, 10, 4.5) + node(66, 10, 4.5),
+  },
+  {
+    name: 'App Tile',
+    note: 'The book knocked out of a pigment tile. Ready for a home-screen icon or social avatar.',
+    svg: () =>
+      `<rect x="2" y="2" width="96" height="96" rx="22" fill="${PIG(1)}"/>
+       <g transform="translate(50 52) scale(.68) translate(-50 -52)">
+         <g fill="none" stroke="${PAPER}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"><path d="${LEFT}"/><path d="${RIGHT}"/></g>
+         <line x1="50" y1="12" x2="50" y2="92" stroke="${PAPER}" stroke-width="6" stroke-linecap="round"/>
+         <circle cx="50" cy="40" r="9.5" fill="${PAPER}" stroke="${PIG(1)}" stroke-width="5"/>
+         <circle cx="50" cy="65" r="9.5" fill="${PAPER}" stroke="${PIG(1)}" stroke-width="5"/>
+       </g>`,
+  },
+];
+
+const wrap = (inner, size, cls = '') =>
+  `<svg class="${cls}" viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+
+document.getElementById('marks').innerHTML = MARKS.map((m, i) => {
+  const inner = m.svg();
+  const pane = mode => `<div class="pane ${mode}">${wrap(inner, 112, 'mark')}
+    <div class="sizes">${[48, 32, 24, 16].map(s => wrap(inner, s)).join('')}</div></div>`;
+  return `<div class="card"><div class="panes">${pane('dark')}${pane('light')}</div>
+    <div class="meta"><h3><span>3${String.fromCharCode(97 + i)}</span>${m.name}</h3><p>${m.note}</p></div></div>`;
+}).join('');
+
+const by = n => MARKS.find(m => m.name === n).svg();
+const WORDMARKS = [
+  ['Kerned italic',   'w1', 'Bible<i>commit</i>',                    'Same as before, with a sliver of space so the italic c clears the e.'],
+  ['Spaced',          'w2', 'Bible <i>commit</i>',                   'A real word space. Reads as a phrase: "Bible, commit."'],
+  ['Upright colour',  'w3', 'Bible<em>commit</em>',                  'No italic, so nothing leans into the e. The colour alone splits the words.'],
+  ['Cell joiner',     'w4', 'Bible<span class="cell"></span>commit', 'One heatmap square sits in the join.'],
+  ['Camel case',      'w1', 'Bible<i>Commit</i>',                    'Both capitalised. Clear word break, a bit more "product name".'],
+  ['Small caps',      'w5', 'Bible<i>commit</i>',                    'Garamond small caps. Bookish, title-page feel; the capital B leads.'],
+];
+const mark = by('Two Commits');
+const LOCKUPS = [
+  ...WORDMARKS.map(([name, cls, text, note]) =>
+    [name, note, `<div class="lu ${cls}">${wrap(mark, 52)}<span>${text}</span></div>`]),
+  ['Spaced · stacked', 'The stacked version, for square spaces like a splash screen.',
+    `<div class="lu stack w2">${wrap(mark, 64)}<span>Bible <i>commit</i></span></div>`],
+  ['Kerned italic · Ribbon', 'Same type with the Ribbon mark (3d), for comparison.',
+    `<div class="lu w1">${wrap(by('Ribbon'), 52)}<span>Bible<i>commit</i></span></div>`],
+];
+document.getElementById('lockups').innerHTML = LOCKUPS.map(([name, note, html]) =>
+  `<div class="card"><div class="panes"><div class="pane dark">${html}</div><div class="pane light">${html}</div></div>
+   <div class="meta"><h3>${name}</h3><p>${note}</p></div></div>`
+).join('');
+</script>
+</body>
+</html>

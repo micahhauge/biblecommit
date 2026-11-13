@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Biblecommit — Ribbon refinements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+<style>
+  .dark  { --paper: #0f1115; --ink: #d9d4c7; --pig: 127 152 209; }
+  .light { --paper: #f2ede3; --ink: #1c1a17; --pig: 36 54 95; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0c0f; color: #d9d4c7; font-family: 'EB Garamond', Georgia, serif; padding: 56px 44px 96px; }
+  header, h2, .grid, .lockups { max-width: 1240px; margin-left: auto; margin-right: auto; }
+  header { margin-bottom: 40px; }
+  header h1 { font-weight: 400; font-size: 44px; }
+  header h1 em { color: rgb(127 152 209); }
+  header p { font-family: 'JetBrains Mono', monospace; font-weight: 300; font-size: 13px; opacity: .55; margin-top: 8px; }
+  h2 { margin-top: 56px; margin-bottom: 18px; font-family: 'JetBrains Mono', monospace; font-weight: 400; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; opacity: .5; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+  .card { border: 1px solid #23262d; border-radius: 14px; overflow: hidden; background: #111318; }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; }
+  .pane { background: var(--paper); color: var(--ink); height: 230px; display: grid; place-items: center; position: relative; }
+  .pane svg.mark { width: 120px; height: 120px; margin-top: -20px; }
+  .sizes { position: absolute; left: 12px; right: 12px; bottom: 10px; display: flex; gap: 10px; align-items: flex-end; }
+  .sizes svg { display: block; }
+  .meta { padding: 16px 18px 18px; }
+  .meta h3 { font-weight: 500; font-size: 21px; }
+  .meta h3 span { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 400; opacity: .45; margin-right: 8px; vertical-align: 3px; }
+  .meta p { font-size: 16px; line-height: 1.4; opacity: .7; margin-top: 4px; }
+
+  .lockups { display: grid; grid-template-columns: repeat(auto-fill, minmax(580px, 1fr)); gap: 20px; }
+  .lockups .pane { height: 170px; }
+  .lu { display: flex; align-items: center; gap: 14px; font-size: 36px; white-space: nowrap; }
+  .lu svg { width: 56px; height: 56px; }
+  .lu i { color: rgb(var(--pig)); margin-left: .07em; }
+  .lu.stack { flex-direction: column; gap: 6px; font-size: 30px; }
+  .lu.stack svg { width: 72px; height: 72px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ribbon, <em>refined</em></h1>
+  <p>variations on 3d · hollow commits · smoothed pages · every mark has ≥ 2 commits · favicon checks at 48 / 32 / 24 / 16px</p>
+</header>
+
+<h2>Refinements</h2>
+<div class="grid" id="marks"></div>
+
+<h2>Lockups · Bible<i>commit</i></h2>
+<div class="lockups" id="lockups"></div>
+
+<script>
+const PIG = a => `rgb(var(--pig) / ${a})`;
+const INK = 'var(--ink)';
+const PAPER = 'var(--paper)';
+const FAINT = 'color-mix(in srgb, var(--ink) 30%, transparent)';
+
+const LEFT  = 'M50 26 C42 19.5 28 16.5 13 18 C10 18.3 8 20.3 8 23.3 V72.5 C8 75.4 10.3 77.3 13.2 77 C28 75.6 41.5 77.5 50 84';
+const RIGHT = 'M50 26 C58 19.5 72 16.5 87 18 C90 18.3 92 20.3 92 23.3 V72.5 C92 75.4 89.7 77.3 86.8 77 C72 75.6 58.5 77.5 50 84';
+
+/* book outline, shifted up by dy so the ribbon has room to hang */
+const pages = (dy = 0, w = 4.5, color = INK) =>
+  `<g transform="translate(0 ${dy})" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"><path d="${LEFT}"/><path d="${RIGHT}"/></g>`;
+const line = (x, y1, y2, w = 4.5, color = PIG(1)) =>
+  `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+const dot = (cx, cy, r = 5.5, sw = 3.6, color = PIG(1)) =>
+  `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${PAPER}" stroke="${color}" stroke-width="${sw}"/>`;
+const ring = (cx, cy, r = 6, color = PIG(1), sw = 4) =>
+  `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${PAPER}" stroke="${color}" stroke-width="${sw}"/>`;
+/* swallowtail ribbon end: x centre, from y0 down to y1, width w, notch depth n */
+const tail = (x, y0, y1, w = 10, n = 6, fill = PIG(1)) =>
+  `<path d="M${x - w / 2 + 0.8} ${y0} H${x + w / 2 - 0.8} V${y1 - 0.8} L${x} ${y1 - n} L${x - w / 2 + 0.8} ${y1 - 0.8} Z" fill="${fill}" stroke="${fill}" stroke-width="1.6" stroke-linejoin="round"/>`;
+
+const MARKS = [
+  {
+    name: 'Classic',
+    note: 'The 3d idea, tidied: book lifted to give the tail room, a wider ribbon with a deeper swallowtail, two commits.',
+    svg: () => pages(-4) + line(50, 8, 80) + dot(50, 27) + dot(50, 56) + tail(50, 76, 98, 10, 6),
+  },
+  {
+    name: 'Long Tail',
+    note: 'The book sits higher and the ribbon trails well below it. More ribbon, more "Bible on the nightstand".',
+    svg: () => pages(-12) + line(50, 4, 70) + dot(50, 19) + dot(50, 47) + tail(50, 66, 98, 10, 7),
+  },
+  {
+    name: 'Tapered',
+    note: 'One continuous shape: the commit line slowly widens until it becomes the ribbon. No seam between the two ideas.',
+    svg: () => pages(-4) +
+      `<path d="M47.75 8 A2.25 2.25 0 0 1 52.25 8 L54.8 97.2 L50 92 L45.2 97.2 Z" fill="${PIG(1)}" stroke="${PIG(1)}" stroke-width="1.6" stroke-linejoin="round"/>` +
+      dot(50, 27) + dot(50, 56),
+  },
+  {
+    name: 'Broad Ribbon',
+    note: 'The ribbon runs the full height at full width, with the commits punched through it. Boldest of the outlined set.',
+    svg: () => pages(-4) +
+      `<path d="M45.3 6.8 H54.7 V97.2 L50 91 L45.3 97.2 Z" fill="${PIG(1)}" stroke="${PIG(1)}" stroke-width="1.6" stroke-linejoin="round"/>` +
+      `<g fill="none" stroke="${PAPER}" stroke-width="2.6"><circle cx="50" cy="27" r="3.2"/><circle cx="50" cy="56" r="3.2"/></g>`,
+  },
+  {
+    name: 'On the Page',
+    note: 'The ribbon lies across the right-hand page, like a real bookmark, and hangs off the bottom edge. The spine stays plain.',
+    svg: () => pages(-4) + line(50, 22, 80, 4.5, INK) +
+      line(66, 6, 74) + dot(66, 25) + dot(66, 52) + tail(66, 70, 96, 10, 6),
+  },
+  {
+    name: 'Two Ribbons',
+    note: 'Many Bibles have more than one marker. Blue for where you are; a faint second for the plan you\'re reading through.',
+    svg: () => pages(-4) +
+      line(64, 10, 72, 4, FAINT) + ring(64, 40, 5.5, FAINT, 3.5) + tail(64, 69, 90, 8, 5, FAINT) +
+      line(50, 8, 80) + dot(50, 27) + dot(50, 56) + tail(50, 76, 98, 10, 6),
+  },
+  {
+    name: 'Page Block',
+    note: 'A second edge under the pages gives the book thickness. Reads more clearly as a Bible than a pamphlet.',
+    svg: () => pages(-8) +
+      `<path d="M8 69 V74 C24 71 40 73 50 81 C60 73 76 71 92 74 V69" transform="translate(0 0)" fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>` +
+      line(50, 6, 78) + dot(50, 23) + dot(50, 52) + tail(50, 76, 98, 10, 6),
+  },
+  {
+    name: 'Next Commit',
+    note: 'The line rises above the book to an open node (the next reading) and falls below it as the ribbon.',
+    svg: () => pages(-2) + line(50, 10, 80, 4.5) + ring(50, 8, 5.5, PIG(.45)) + dot(50, 34) + dot(50, 62) + tail(50, 78, 98, 10, 6),
+  },
+  {
+    name: 'Solid Pages',
+    note: 'Filled pages, the gutter knocked out with two notches, and the ribbon hanging below. Heaviest; reads at any size.',
+    svg: () =>
+      `<g transform="translate(0 -6)" fill="${PIG(1)}"><path d="${LEFT} Z"/><path d="${RIGHT} Z"/></g>` +
+      line(50, 14, 82, 5, PAPER) +
+      `<g fill="${PAPER}"><circle cx="50" cy="29" r="8.5"/><circle cx="50" cy="59" r="8.5"/></g>` +
+      `<g fill="${PAPER}" stroke="${PIG(1)}" stroke-width="3.5"><circle cx="50" cy="29" r="4.4"/><circle cx="50" cy="59" r="4.4"/></g>` +
+      tail(50, 80, 99, 10, 6),
+  },
+  {
+    name: 'Bold (small sizes)',
+    note: 'Heavier lines and bigger commits, for favicons and the tab bar. The companion to whichever of the above you pick.',
+    svg: () =>
+      `<g fill="none" stroke="${INK}" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M50 22 C41 15.5 27 13 13 14.5 C9.5 14.8 7 17.3 7 20.8 V63.5 C7 67 9.8 69.3 13.3 69 C27 67.6 40.5 69 50 75"/>
+        <path d="M50 22 C59 15.5 73 13 87 14.5 C90.5 14.8 93 17.3 93 20.8 V63.5 C93 67 90.2 69.3 86.7 69 C73 67.6 59.5 69 50 75"/></g>` +
+      line(50, 6, 74, 8) + dot(50, 28, 7.5, 5.5) + dot(50, 59, 7.5, 5.5) + tail(50, 72, 99, 14, 8),
+  },
+  {
+    name: 'App Tile',
+    note: 'The book knocked out of a pigment tile, its ribbon running off the bottom edge of the icon.',
+    svg: () =>
+      `<defs><clipPath id="tile"><rect x="2" y="2" width="96" height="96" rx="22"/></clipPath></defs>
+       <rect x="2" y="2" width="96" height="96" rx="22" fill="${PIG(1)}"/>
+       <g clip-path="url(#tile)">
+         <g transform="translate(50 44) scale(.68) translate(-50 -48)">
+           <g fill="none" stroke="${PAPER}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"><path d="${LEFT}"/><path d="${RIGHT}"/></g>
+         </g>
+         <line x1="50" y1="12" x2="50" y2="78" stroke="${PAPER}" stroke-width="4.5" stroke-linecap="round"/>
+         <circle cx="50" cy="31" r="5" fill="${PIG(1)}" stroke="${PAPER}" stroke-width="3.5"/>
+         <circle cx="50" cy="57" r="5" fill="${PIG(1)}" stroke="${PAPER}" stroke-width="3.5"/>
+         <rect x="45.5" y="74" width="9" height="30" fill="${PAPER}"/>
+       </g>`,
+  },
+];
+
+const wrap = (inner, size, cls = '') =>
+  `<svg class="${cls}" viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+
+document.getElementById('marks').innerHTML = MARKS.map((m, i) => {
+  const inner = m.svg();
+  const pane = mode => `<div class="pane ${mode}">${wrap(inner, 120, 'mark')}
+    <div class="sizes">${[48, 32, 24, 16].map(s => wrap(inner, s)).join('')}</div></div>`;
+  return `<div class="card"><div class="panes">${pane('dark')}${pane('light')}</div>
+    <div class="meta"><h3><span>R${i + 1}</span>${m.name}</h3><p>${m.note}</p></div></div>`;
+}).join('');
+
+const by = n => MARKS.find(m => m.name === n).svg();
+const word = 'Bible<i>commit</i>';
+const LOCKUPS = [
+  ['R1 Classic', `<div class="lu">${wrap(by('Classic'), 56)}<span>${word}</span></div>`],
+  ['R3 Tapered', `<div class="lu">${wrap(by('Tapered'), 56)}<span>${word}</span></div>`],
+  ['R5 On the Page', `<div class="lu">${wrap(by('On the Page'), 56)}<span>${word}</span></div>`],
+  ['R1 Classic · stacked', `<div class="lu stack">${wrap(by('Classic'), 72)}<span>${word}</span></div>`],
+];
+document.getElementById('lockups').innerHTML = LOCKUPS.map(([name, html]) =>
+  `<div class="card"><div class="panes"><div class="pane dark">${html}</div><div class="pane light">${html}</div></div>
+   <div class="meta"><h3>${name}</h3></div></div>`
+).join('');
+</script>
+</body>
+</html>

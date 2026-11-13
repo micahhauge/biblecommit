@@ -4,8 +4,8 @@ import { PAPER } from '@/mode-pref';
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/',
-    name: 'biblecommit',
-    short_name: 'biblecommit',
+    name: 'Biblecommit',
+    short_name: 'Biblecommit',
     description: 'Commit the Scripture you read.',
     start_url: '/',
     scope: '/',
@@ -18,7 +18,7 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: '/icon/192', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: '/icon/512', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: '/icon/512', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/icon/maskable-512', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   };
 }

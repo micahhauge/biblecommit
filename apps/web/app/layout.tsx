@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { Account } from '@/components/Account';
 import { ModeToggle, Settings } from '@/components/ModeControls';
 import { Nav } from '@/components/Nav';
+import { iconSvg } from '@/brand';
 import { MODE_COOKIE, PAPER, parseModePref } from '@/mode-pref';
 import { Providers } from './providers';
 import './globals.css';
@@ -14,11 +15,11 @@ const serif = EB_Garamond({ subsets: ['latin'], weight: ['400', '500'], style: [
 const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['300', '400'], variable: '--mono' });
 
 export const metadata: Metadata = {
-  title: 'biblecommit',
+  title: 'Biblecommit',
   description: 'Commit the Scripture you read.',
-  applicationName: 'biblecommit',
+  applicationName: 'Biblecommit',
   // Installed on iOS: run standalone, and draw under the status bar (the header pads for it).
-  appleWebApp: { capable: true, title: 'biblecommit', statusBarStyle: 'black-translucent' },
+  appleWebApp: { capable: true, title: 'Biblecommit', statusBarStyle: 'black-translucent' },
   formatDetection: { telephone: false },
 };
 
@@ -77,7 +78,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <Providers>
             <header>
               <div className="mark">
-                bible<i>commit</i>
+                <span className="mark-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: iconSvg('app', { rounded: true }) }} />
+                <span>
+                  Bible<i>commit</i>
+                </span>
               </div>
               <Nav variant="top" />
               <div className="hbtns">

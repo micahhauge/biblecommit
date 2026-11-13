@@ -8,6 +8,18 @@ loadEnvConfig(path.resolve(process.cwd(), '../..'), process.env.NODE_ENV !== 'pr
 
 const config: NextConfig = {
   transpilePackages: ['@biblecommit/api', '@biblecommit/core', '@biblecommit/db'],
+  // The service worker must never be cached, or deploys can't replace it.
+  async headers() {
+    return [
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Content-Type', value: 'application/javascript; charset=utf-8' },
+        ],
+      },
+    ];
+  },
 };
 
 export default config;

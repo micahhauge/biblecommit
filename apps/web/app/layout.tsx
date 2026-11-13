@@ -15,11 +15,11 @@ const serif = EB_Garamond({ subsets: ['latin'], weight: ['400', '500'], style: [
 const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['300', '400'], variable: '--mono' });
 
 export const metadata: Metadata = {
-  title: 'Biblecommit',
+  title: 'BibleCommit',
   description: 'Commit the Scripture you read.',
-  applicationName: 'Biblecommit',
+  applicationName: 'BibleCommit',
   // Installed on iOS: run standalone, and draw under the status bar (the header pads for it).
-  appleWebApp: { capable: true, title: 'Biblecommit', statusBarStyle: 'black-translucent' },
+  appleWebApp: { capable: true, title: 'BibleCommit', statusBarStyle: 'black-translucent' },
   formatDetection: { telephone: false },
 };
 
@@ -78,9 +78,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <Providers>
             <header>
               <div className="mark">
-                <span className="mark-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: iconSvg('app', { rounded: true }) }} />
+                <span className="mark-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: iconSvg({ rounded: true }) }} />
                 <span>
-                  Bible<i>commit</i>
+                  Bible<i>Commit</i>
                 </span>
               </div>
               <Nav variant="top" />

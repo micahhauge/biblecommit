@@ -4,8 +4,8 @@ import { PAPER } from '@/mode-pref';
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/',
-    name: 'Biblecommit',
-    short_name: 'Biblecommit',
+    name: 'BibleCommit',
+    short_name: 'BibleCommit',
     description: 'Commit the Scripture you read.',
     start_url: '/',
     scope: '/',

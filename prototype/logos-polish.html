@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Biblecommit — polished directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+<style>
+  .dark  { --paper: #0f1115; --ink: #d9d4c7; --pig: 127 152 209; }
+  .light { --paper: #f2ede3; --ink: #1c1a17; --pig: 36 54 95; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0c0f; color: #d9d4c7; font-family: 'EB Garamond', Georgia, serif; padding: 56px 44px 96px; }
+  header, h2, .grid, .ctx, .lockups { max-width: 1240px; margin-left: auto; margin-right: auto; }
+  header { margin-bottom: 40px; }
+  header h1 { font-weight: 400; font-size: 44px; }
+  header h1 em { color: rgb(127 152 209); }
+  header p { font-family: 'JetBrains Mono', monospace; font-weight: 300; font-size: 13px; opacity: .55; margin-top: 8px; line-height: 1.6; max-width: 820px; }
+  h2 { margin-top: 56px; margin-bottom: 18px; font-family: 'JetBrains Mono', monospace; font-weight: 400; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; opacity: .5; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+  .card { border: 1px solid #23262d; border-radius: 14px; overflow: hidden; background: #111318; }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; }
+  .pane { background: var(--paper); color: var(--ink); height: 240px; display: grid; place-items: center; position: relative; }
+  .pane svg.mark { width: 128px; height: 128px; margin-top: -22px; }
+  .sizes { position: absolute; left: 12px; right: 12px; bottom: 10px; display: flex; gap: 10px; align-items: flex-end; }
+  .sizes svg { display: block; }
+  .meta { padding: 16px 18px 18px; }
+  .meta h3 { font-weight: 500; font-size: 21px; }
+  .meta h3 span { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 400; opacity: .45; margin-right: 8px; vertical-align: 3px; }
+  .meta p { font-size: 16px; line-height: 1.4; opacity: .7; margin-top: 4px; }
+
+  .lockups { display: grid; grid-template-columns: repeat(auto-fill, minmax(580px, 1fr)); gap: 20px; }
+  .lockups .pane { height: 180px; }
+  .lu { display: flex; align-items: center; gap: 16px; font-size: 38px; white-space: nowrap; }
+  .lu svg { width: 58px; height: 58px; }
+  .lu i { color: rgb(var(--pig)); margin-left: .07em; }
+  .lu.stack { flex-direction: column; gap: 8px; font-size: 30px; }
+  .lu.stack svg { width: 80px; height: 80px; }
+
+  /* PWA icons */
+  .t-night { --paper: #0f1115; --ink: #d9d4c7; --pig: 127 152 209; }
+  .t-paper { --paper: #f2ede3; --ink: #1c1a17; --pig: 36 54 95; }
+  .t-navy  { --paper: #22325a; --ink: #f2ede3; --pig: 158 182 236; }
+  .icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; max-width: 1240px; margin: 0 auto; }
+  .icard { border: 1px solid #23262d; border-radius: 14px; background: #111318; padding: 22px 20px 18px; }
+  .irow { display: flex; gap: 18px; align-items: flex-end; }
+  .irow + .irow { margin-top: 16px; }
+  .ico { position: relative; overflow: hidden; flex: none; }
+  .ico svg { display: block; width: 100%; height: 100%; }
+  .ico.ios { width: 96px; height: 96px; border-radius: 22.5%; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+  .ico.t-night { box-shadow: inset 0 0 0 1px rgba(255,255,255,.09), 0 6px 18px rgba(0,0,0,.35); }
+  .ico.t-night svg { border-radius: inherit; }
+  .ctx .card.phone.light { background: linear-gradient(160deg, #e6dfd1, #c4baa6 75%); }
+  .phone.light .app { color: #1c1a17; }
+  .phone.light .app .ic { background: rgba(0,0,0,.08); }
+  .ico.circle { width: 56px; height: 56px; border-radius: 50%; }
+  .ico.sq { width: 56px; height: 56px; border-radius: 12%; }
+  .ico .safe { position: absolute; inset: 10%; border: 1px dashed rgba(255, 90, 90, .9); border-radius: 50%; }
+  .ilabel { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; opacity: .45; margin-top: 6px; text-align: center; }
+  .icol { display: flex; flex-direction: column; align-items: center; }
+  .icard h3 { font-weight: 500; font-size: 20px; margin-top: 14px; }
+  .icard h3 span { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 400; opacity: .45; margin-right: 8px; vertical-align: 3px; }
+  .icard p { font-size: 15px; opacity: .65; margin-top: 2px; }
+
+  /* in-context mockups */
+  .ctx { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; }
+  .ctx .card { background: var(--paper); color: var(--ink); }
+  .browser { padding: 14px 14px 0; background: color-mix(in srgb, var(--ink) 7%, var(--paper)); }
+  .tabs { display: flex; gap: 6px; align-items: flex-end; }
+  .tab { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 9px 9px 0 0; font-family: -apple-system, system-ui, sans-serif; font-size: 12.5px; color: color-mix(in srgb, var(--ink) 70%, transparent); min-width: 190px; }
+  .tab.on { background: var(--paper); color: var(--ink); }
+  .tab svg { width: 16px; height: 16px; flex: none; }
+  .site { padding: 22px 28px 34px; }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 11%, transparent); }
+  .nav .brand { display: flex; align-items: center; gap: 10px; font-size: 24px; }
+  .nav .brand svg { width: 34px; height: 34px; }
+  .nav .brand i { color: rgb(var(--pig)); margin-left: .07em; }
+  .nav .links { display: flex; gap: 22px; font-family: 'JetBrains Mono', monospace; font-size: 12px; opacity: .6; }
+  .hero { padding-top: 26px; font-size: 30px; line-height: 1.15; }
+  .hero em { color: rgb(var(--pig)); }
+  .hero small { display: block; font-family: 'JetBrains Mono', monospace; font-size: 12px; opacity: .5; margin-top: 10px; }
+  .phone { display: grid; place-items: center; padding: 28px; background: linear-gradient(160deg, #2a3348, #12151d 70%); }
+  .home { display: grid; grid-template-columns: repeat(4, 64px); gap: 20px 22px; }
+  .app { display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: -apple-system, system-ui, sans-serif; font-size: 11px; color: #fff; }
+  .app .ic { width: 64px; height: 64px; border-radius: 15px; background: rgba(255,255,255,.12); }
+  .app svg { width: 64px; height: 64px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Polished <em>directions</em></h1>
+  <p>Construction rules for all of these: one stroke weight across book, line and rings; commits sit where the pages bind; every crossing gets a clean cut-out gap rather than an overlap; hollow rings show whatever is behind them. Favicon checks at 48 / 32 / 24 / 16px.</p>
+</header>
+
+<h2>Directions</h2>
+<div class="grid" id="marks"></div>
+
+<h2>PWA app icons · Night / Paper / Navy · iOS rounded square, Android circle &amp; squircle, maskable safe zone (dashed)</h2>
+<div class="icons" id="icons"></div>
+
+<h2>In context · P1 Binding Points + P8 App Tile</h2>
+<div class="ctx" id="ctx"></div>
+
+<h2>Lockups · Bible<i>commit</i></h2>
+<div class="lockups" id="lockups"></div>
+
+<script>
+const PIG = a => `rgb(var(--pig) / ${a})`;
+const INK = 'var(--ink)';
+const PAPER = 'var(--paper)';
+
+/* ─── geometry ─── */
+/* Left page of an open book, from the top of the spine round the outer edge to the bottom of
+   the spine. T/B: spine top/bottom; W: half-width; rise: how far the outer corners sit above. */
+function leftPage({ T = 26, B = 74, W = 42, rise = 8, r = 5 } = {}) {
+  const L = 50 - W, To = T - rise, Bo = B - 7;
+  return `M50 ${T} C41 ${T - 6} ${L + 18} ${To - 0.8} ${L + r} ${To} Q${L} ${To} ${L} ${To + r} ` +
+         `V${Bo - r} Q${L} ${Bo} ${L + r} ${Bo} C${L + 18} ${Bo - 0.8} 41 ${B - 6} 50 ${B}`;
+}
+const mirror = inner => `<g transform="matrix(-1 0 0 1 100 0)">${inner}</g>`;
+const tailPath = (x, y0, y1, w, n) =>
+  `M${x - w / 2 + 0.8} ${y0} H${x + w / 2 - 0.8} V${y1 - 0.8} L${x} ${y1 - n} L${x - w / 2 + 0.8} ${y1 - 0.8} Z`;
+
+/* Each rendered SVG gets unique mask ids. */
+let uid = 0;
+
+/* The core construction. Book + commit line + hollow rings + ribbon tail, with masks cutting
+   clean gaps so nothing overlaps. Colours are parameters so the same drawing works on a tile. */
+function build(o = {}) {
+  const {
+    T = 26, B = 74, W = 42, rise = 8, S = 5.5,
+    rings = [26, 74], r = 7, gap = 2.2,
+    line = [6, 84], tail = [80, 99, 12, 7],
+    book = INK, pig = PIG(1), fill = null, float = false, bookOff = false,
+  } = o;
+  const id = `m${uid++}`;
+  const page = leftPage({ T, B, W, rise });
+  const outer = r + S / 2;
+  const bookMask = `<mask id="${id}b" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120">
+      <rect x="-10" y="-10" width="120" height="120" fill="#fff"/>
+      ${rings.map(y => `<circle cx="50" cy="${y}" r="${outer + gap}" fill="#000"/>`).join('')}
+      ${float ? `<rect x="${50 - S / 2 - gap - 1.5}" y="-10" width="${S + 2 * gap + 3}" height="120" fill="#000"/>` : ''}
+    </mask>`;
+  const lineMask = `<mask id="${id}l" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120">
+      <rect x="-10" y="-10" width="120" height="120" fill="#fff"/>
+      ${rings.map(y => `<circle cx="50" cy="${y}" r="${r}" fill="#000"/>`).join('')}
+    </mask>`;
+  const pages = bookOff ? '' : `
+    <g mask="url(#${id}b)">
+      ${fill ? `<g fill="${fill}" stroke="none"><path d="${page} Z"/>${mirror(`<path d="${page} Z"/>`)}</g>` : ''}
+      <g fill="none" stroke="${book}" stroke-width="${S}" stroke-linecap="round" stroke-linejoin="round">
+        <path d="${page}"/>${mirror(`<path d="${page}"/>`)}
+      </g>
+    </g>`;
+  return `<defs>${bookMask}${lineMask}</defs>${pages}
+    <g mask="url(#${id}l)">
+      <line x1="50" y1="${line[0]}" x2="50" y2="${line[1]}" stroke="${pig}" stroke-width="${S}" stroke-linecap="round"/>
+      ${tail ? `<path d="${tailPath(50, ...tail)}" fill="${pig}" stroke="${pig}" stroke-width="1.6" stroke-linejoin="round"/>` : ''}
+    </g>
+    ${rings.map(y => `<circle cx="50" cy="${y}" r="${r}" fill="none" stroke="${pig}" stroke-width="${S}"/>`).join('')}`;
+}
+
+const MARKS = [
+  {
+    name: 'Binding Points',
+    note: 'My lead. The two commits sit exactly where the pages bind, top and bottom, so nothing is placed arbitrarily. The commit line rises above the book and drops below as the ribbon.',
+    svg: (o = {}) => build(o),
+  },
+  {
+    name: 'Monoline',
+    note: 'The same drawing in a single pigment colour. One colour reads as a logo rather than an illustration, and it\'s trivial to emboss, stamp or print in one ink.',
+    svg: (o = {}) => build({ book: PIG(1), ...o }),
+  },
+  {
+    name: 'Tinted Pages',
+    note: 'A faint pigment wash inside the pages, like light through paper. Adds depth without adding a single line.',
+    svg: (o = {}) => build({ fill: PIG(0.16), ...o }),
+  },
+  {
+    name: 'Floating Leaves',
+    note: 'The pages are cut free of the spine, so the commit line sits in its own channel. Airy, very "designed", and the ribbon reads as a separate object.',
+    svg: (o = {}) => build({ float: true, rings: [34, 62], line: [6, 84], ...o }),
+  },
+  {
+    name: 'Lettermark B',
+    note: 'A capital B whose stem is the commit line and ribbon; the commits sit at the joins of the bowls. Works as a monogram on its own.',
+    svg: () => {
+      const id = `m${uid++}`, S = 6, r = 6.8, outer = r + S / 2;
+      const ys = [44, 82];
+      return `<defs>
+        <mask id="${id}b" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120"><rect x="-10" y="-10" width="120" height="120" fill="#fff"/>
+          ${ys.map(y => `<circle cx="34" cy="${y}" r="${outer + 3}" fill="#000"/>`).join('')}</mask>
+        <mask id="${id}l" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120"><rect x="-10" y="-10" width="120" height="120" fill="#fff"/>
+          ${ys.map(y => `<circle cx="34" cy="${y}" r="${r}" fill="#000"/>`).join('')}</mask></defs>
+        <g mask="url(#${id}b)" fill="none" stroke="${INK}" stroke-width="${S}" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M34 8 H54 C66 8 74 15 74 25.5 C74 36 66 44 54 44 H34"/>
+          <path d="M34 44 H58 C71 44 80 52 80 63 C80 74 71 82 58 82 H34"/>
+        </g>
+        <g mask="url(#${id}l)">
+          <line x1="34" y1="8" x2="34" y2="86" stroke="${PIG(1)}" stroke-width="${S}" stroke-linecap="round"/>
+          <path d="${tailPath(34, 84, 99, 12, 7)}" fill="${PIG(1)}" stroke="${PIG(1)}" stroke-width="1.6" stroke-linejoin="round"/>
+        </g>
+        ${ys.map(y => `<circle cx="34" cy="${y}" r="${r}" fill="none" stroke="${PIG(1)}" stroke-width="${S}"/>`).join('')}`;
+    },
+  },
+  {
+    name: 'Bookmark First',
+    note: 'Flip the emphasis: the ribbon is the silhouette, with the book and commits cut out of it. Unmistakable shape at every size.',
+    svg: () => {
+      const id = `m${uid++}`;
+      const page = leftPage({ T: 24, B: 46, W: 17, rise: 5, r: 3 });
+      return `<defs><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+          <rect width="100" height="100" fill="#fff"/>
+          <g fill="none" stroke="#000" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="${page}"/>${mirror(`<path d="${page}"/>`)}
+            <line x1="50" y1="12" x2="50" y2="74"/>
+            <circle cx="50" cy="57" r="4.6"/><circle cx="50" cy="73" r="4.6"/>
+          </g></mask></defs>
+        <path d="M28 4 H72 C74.2 4 76 5.8 76 8 V96 L50 82 L24 96 V8 C24 5.8 25.8 4 28 4 Z" fill="${PIG(1)}" stroke="${PIG(1)}" stroke-width="2" stroke-linejoin="round" mask="url(#${id})"/>`;
+    },
+  },
+  {
+    name: 'Roundel',
+    note: 'Binding Points set in a ring, with the ribbon breaking out through the bottom. A seal or badge: good for stickers, merch and avatars.',
+    svg: () => {
+      const id = `m${uid++}`;
+      return `<defs><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+          <rect width="100" height="100" fill="#fff"/><rect x="41" y="80" width="18" height="30" fill="#000"/></mask></defs>
+        <circle cx="50" cy="50" r="45" fill="none" stroke="${INK}" stroke-width="4" mask="url(#${id})"/>
+        <g transform="translate(50 46) scale(.6) translate(-50 -46)">${build({ tail: null, line: [6, 120] })}</g>
+        <line x1="50" y1="80" x2="50" y2="86" stroke="${PIG(1)}" stroke-width="3.3"/>
+        <path d="${tailPath(50, 84, 99, 9, 5)}" fill="${PIG(1)}" stroke="${PIG(1)}" stroke-width="1.6" stroke-linejoin="round"/>`;
+    },
+  },
+  {
+    name: 'App Tile',
+    note: 'A soft pigment gradient on a squircle, the mark knocked out in paper, the ribbon running off the bottom edge. Built for the home screen.',
+    icon: () => MARKS.find(m => m.name === 'App Tile').svg(true),
+    svg: (full = false) => {
+      const id = `t${uid++}`;
+      const sq = full ? 'M0 0 H100 V100 H0 Z' : 'M50 2 C88 2 98 12 98 50 C98 88 88 98 50 98 C12 98 2 88 2 50 C2 12 12 2 50 2 Z';
+      return `<defs>
+          <linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" style="stop-color: color-mix(in srgb, rgb(var(--pig)) 88%, white)"/>
+            <stop offset="1" style="stop-color: color-mix(in srgb, rgb(var(--pig)) 82%, black)"/>
+          </linearGradient>
+          <clipPath id="${id}c"><path d="${sq}"/></clipPath></defs>
+        <path d="${sq}" fill="url(#${id}g)"/>
+        <g clip-path="url(#${id}c)">
+          <g transform="translate(50 47) scale(.62) translate(-50 -40)">
+            ${build({ book: PAPER, pig: PAPER, tail: [80, 150, 12, 0], line: [6, 150], S: 6 })}
+          </g>
+        </g>`;
+    },
+  },
+  {
+    name: 'Bold (small sizes)',
+    note: 'Binding Points redrawn for 16–32px: heavier stroke, bigger rings, wider gaps. Ship it as the favicon next to P1.',
+    svg: () => build({ S: 8, r: 8, gap: 3.5, W: 43, rise: 7, T: 28, B: 72, rings: [28, 72], line: [4, 84], tail: [80, 99, 15, 8] }),
+  },
+];
+
+const wrap = (fn, size, cls = '') =>
+  `<svg class="${cls}" viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">${fn()}</svg>`;
+
+document.getElementById('marks').innerHTML = MARKS.map((m, i) => {
+  const pane = mode => `<div class="pane ${mode}">${wrap(m.svg, 128, 'mark')}
+    <div class="sizes">${[48, 32, 24, 16].map(s => wrap(m.svg, s)).join('')}</div></div>`;
+  return `<div class="card"><div class="panes">${pane('dark')}${pane('light')}</div>
+    <div class="meta"><h3><span>P${i + 1}</span>${m.name}</h3><p>${m.note}</p></div></div>`;
+}).join('');
+
+/* PWA icon: full-bleed background; the mark scaled into the maskable safe zone (centre 80% circle). */
+const iconSvg = m => `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">` +
+  (m.icon ? m.icon() : `<rect width="100" height="100" fill="var(--paper)"/>
+     <g transform="translate(50 50) scale(.66) translate(-50 -52)">${m.svg({ S: 7, r: 7.5 })}</g>`) + `</svg>`;
+const THEMES = [['t-night', 'night'], ['t-paper', 'paper'], ['t-navy', 'navy']];
+document.getElementById('icons').innerHTML = MARKS.map((m, i) => `
+  <div class="icard">
+    <div class="irow">${THEMES.map(([t, l]) => `<div class="icol"><div class="ico ios ${t}">${iconSvg(m)}</div><div class="ilabel">${l}</div></div>`).join('')}</div>
+    <div class="irow">
+      ${THEMES.map(([t]) => `<div class="ico circle ${t}">${iconSvg(m)}</div>`).join('')}
+      <div class="ico sq t-navy">${iconSvg(m)}</div>
+      <div class="ico sq t-paper">${iconSvg(m)}<div class="safe"></div></div>
+    </div>
+    <h3><span>P${i + 1}</span>${m.name}</h3>
+  </div>`).join('');
+
+const by = n => MARKS.find(m => m.name === n).svg;
+const P1 = by('Binding Points'), BOLD = by('Bold (small sizes)'), TILE = by('App Tile');
+
+const site = mode => `
+  <div class="card ${mode}">
+    <div class="browser"><div class="tabs">
+      <div class="tab on">${wrap(BOLD, 16)}Biblecommit · Today</div>
+      <div class="tab">${wrap(BOLD, 16)}Biblecommit · Canon</div>
+    </div></div>
+    <div class="site">
+      <div class="nav"><div class="brand">${wrap(P1, 34)}<span>Bible<i>commit</i></span></div>
+        <div class="links"><span>today</span><span>canon</span><span>settings</span></div></div>
+      <div class="hero">Commit the Scripture <em>you read.</em><small>gen 1-3 · jn 3:16-4:2 · ps 1, 3, 5</small></div>
+    </div>
+  </div>`;
+const phone = mode => `
+  <div class="card phone ${mode}"><div class="home">
+    <div class="app"><div class="ic"></div>Notes</div>
+    <div class="app">${wrap(TILE, 64)}Biblecommit</div>
+    <div class="app"><div class="ic"></div>Maps</div>
+    <div class="app"><div class="ic"></div>Music</div>
+  </div></div>`;
+document.getElementById('ctx').innerHTML = site('dark') + phone('dark') + site('light') + phone('light');
+
+const word = 'Bible<i>commit</i>';
+const LOCKUPS = [
+  ['P1 Binding Points', `<div class="lu">${wrap(P1, 58)}<span>${word}</span></div>`],
+  ['P2 Monoline', `<div class="lu">${wrap(by('Monoline'), 58)}<span>${word}</span></div>`],
+  ['P4 Floating Leaves', `<div class="lu">${wrap(by('Floating Leaves'), 58)}<span>${word}</span></div>`],
+  ['P1 · stacked', `<div class="lu stack">${wrap(P1, 80)}<span>${word}</span></div>`],
+];
+document.getElementById('lockups').innerHTML = LOCKUPS.map(([name, html]) =>
+  `<div class="card"><div class="panes"><div class="pane dark">${html}</div><div class="pane light">${html}</div></div>
+   <div class="meta"><h3>${name}</h3></div></div>`
+).join('');
+</script>
+</body>
+</html>

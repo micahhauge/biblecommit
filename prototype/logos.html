@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>biblecommit — logo options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  /* iron gall palette, same tokens as apps/web/app/globals.css */
+  .dark  { --paper: #0f1115; --ink: #d9d4c7; --pig: 127 152 209; }
+  .light { --paper: #f2ede3; --ink: #1c1a17; --pig: 36 54 95; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0b0c0f; color: #d9d4c7;
+    font-family: 'EB Garamond', Georgia, serif;
+    padding: 56px 44px 96px;
+  }
+  header { max-width: 1240px; margin: 0 auto 48px; }
+  header h1 { font-weight: 400; font-size: 44px; letter-spacing: -0.01em; }
+  header h1 em { color: rgb(127 152 209); }
+  header p { font-family: 'JetBrains Mono', monospace; font-weight: 300; font-size: 13px; opacity: .55; margin-top: 8px; }
+  h2 {
+    max-width: 1240px; margin: 56px auto 18px;
+    font-family: 'JetBrains Mono', monospace; font-weight: 400; font-size: 12px;
+    letter-spacing: .14em; text-transform: uppercase; opacity: .5;
+  }
+  .grid { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+  .card { border: 1px solid #23262d; border-radius: 14px; overflow: hidden; background: #111318; }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; }
+  .pane { background: var(--paper); color: var(--ink); height: 200px; display: grid; place-items: center; position: relative; }
+  .pane svg.mark { width: 104px; height: 104px; }
+  .sizes { position: absolute; left: 12px; bottom: 10px; display: flex; gap: 10px; align-items: flex-end; }
+  .sizes svg { display: block; }
+  .meta { padding: 16px 18px 18px; }
+  .meta h3 { font-weight: 500; font-size: 21px; }
+  .meta h3 span { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 400; opacity: .45; margin-right: 8px; vertical-align: 3px; }
+  .meta p { font-size: 16px; line-height: 1.4; opacity: .7; margin-top: 4px; }
+
+  .wide .panes { grid-template-columns: 1fr; }
+  .wide .pane { height: 150px; }
+  .wordgrid { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(580px, 1fr)); gap: 20px; }
+  .wordgrid .panes { grid-template-columns: 1fr 1fr; }
+
+  /* wordmarks */
+  .wm { font-size: 40px; letter-spacing: -0.01em; white-space: nowrap; display: flex; align-items: center; gap: 12px; }
+  .wm-a { gap: 0; }
+  .wm-a b { font-weight: 400; }
+  .wm-a i { color: rgb(var(--pig)); margin-left: .07em; }
+  .wm-b { font-weight: 400; }
+  .wm-b .cell { display: inline-block; width: .32em; height: .32em; background: rgb(var(--pig)); border-radius: 2px; margin: 0 .08em; transform: translateY(-.05em); }
+  .wm-c { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 300; }
+  .wm-c .p { color: rgb(var(--pig)); }
+  .wm-c .cur { display: inline-block; width: .55em; height: 1.05em; background: rgb(var(--pig)); vertical-align: -.18em; margin-left: .1em; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .wm-d { flex-direction: column; gap: 2px; align-items: center; }
+  .wm-d .top { font-size: 24px; letter-spacing: .28em; text-transform: uppercase; font-weight: 500; margin-right: -.28em; }
+  .wm-d .bot { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: .3em; text-transform: uppercase; opacity: .55; margin-right: -.3em; }
+  .wm-e { font-size: 38px; }
+  .wm-e svg { width: 44px; height: 44px; }
+  .wm-e span i { color: rgb(var(--pig)); }
+  .wm-f { font-size: 36px; }
+  .wm-f svg { width: 40px; height: 40px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>bible<em>commit</em> — logo options</h1>
+  <p>iron gall palette · each mark shown dark + light, with 32px / 16px favicon checks bottom-left</p>
+</header>
+
+<h2>Marks</h2>
+<div class="grid" id="marks"></div>
+
+<h2>Wordmarks &amp; lockups</h2>
+<div class="wordgrid" id="words"></div>
+
+<script>
+const PIG = a => `rgb(var(--pig) / ${a})`;
+const INK = 'var(--ink)';
+const PAPER = 'var(--paper)';
+
+/* deterministic "reading history" opacities for heatmap cells */
+const rand = (s => () => (s = (s * 9301 + 49297) % 233280) / 233280)(7);
+
+const MARKS = [
+  {
+    name: 'Heatmap Cross',
+    note: 'A 5×5 slice of the year heatmap. The fully-read days form a cross. Reads as "contribution graph" and "faith" at once, and holds up at 16px.',
+    svg: () => {
+      const cross = new Set(['0,2','1,0','1,1','1,2','1,3','1,4','2,2','3,2','4,2']);
+      let s = '';
+      for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) {
+        const on = cross.has(`${r},${c}`);
+        const a = on ? 1 : (0.07 + rand() * 0.2).toFixed(2);
+        s += `<rect x="${4 + c * 19}" y="${4 + r * 19}" width="16" height="16" rx="3" fill="${PIG(a)}"/>`;
+      }
+      return s;
+    },
+  },
+  {
+    name: 'Commit Cross',
+    note: 'A git commit graph drawn as a cross: one trunk, one crossbar, nodes at every end. The centre node is the filled "HEAD".',
+    svg: () => `
+      <g stroke="${INK}" stroke-width="5" stroke-linecap="round">
+        <line x1="50" y1="14" x2="50" y2="88"/>
+        <line x1="20" y1="38" x2="80" y2="38"/>
+      </g>
+      <g fill="${PAPER}" stroke="${INK}" stroke-width="5">
+        <circle cx="50" cy="12" r="7"/>
+        <circle cx="16" cy="38" r="7"/>
+        <circle cx="84" cy="38" r="7"/>
+        <circle cx="50" cy="88" r="7"/>
+      </g>
+      <circle cx="50" cy="38" r="11" fill="${PIG(1)}"/>`,
+  },
+  {
+    name: 'Open Book, Committed',
+    note: 'An open book whose spine is a commit line. Three nodes down the gutter: what you read, in order.',
+    svg: () => `
+      <g fill="none" stroke="${INK}" stroke-width="4.5" stroke-linejoin="round">
+        <path d="M50 26 C40 18 24 16 8 19 V77 C24 74 40 76 50 84"/>
+        <path d="M50 26 C60 18 76 16 92 19 V77 C76 74 60 76 50 84"/>
+      </g>
+      <line x1="50" y1="10" x2="50" y2="94" stroke="${PIG(1)}" stroke-width="4.5" stroke-linecap="round"/>
+      <g fill="${PIG(1)}" stroke="${PAPER}" stroke-width="3.5">
+        <circle cx="50" cy="34" r="7"/>
+        <circle cx="50" cy="55" r="7"/>
+        <circle cx="50" cy="76" r="7"/>
+      </g>`,
+  },
+  {
+    name: 'Iron Gall Drop',
+    note: 'A drop of the ink the palette is named for, with a commit node knocked out of it. Most ownable / least literal.',
+    svg: () => `
+      <path d="M50 6 C50 6 18 46 18 64 A32 32 0 0 0 82 64 C82 46 50 6 50 6Z" fill="${PIG(1)}"/>
+      <line x1="50" y1="34" x2="50" y2="86" stroke="${PAPER}" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="50" cy="62" r="10" fill="${PIG(1)}" stroke="${PAPER}" stroke-width="5"/>`,
+  },
+  {
+    name: 'Garamond Tile',
+    note: 'An italic Garamond "b" set in a single heatmap cell, with a tiny filled cell as the full stop. Pure app-icon material.',
+    svg: () => `
+      <rect x="6" y="6" width="88" height="88" rx="20" fill="${PIG(1)}"/>
+      <text x="44" y="74" text-anchor="middle" font-family="EB Garamond" font-style="italic" font-weight="500" font-size="78" fill="${PAPER}">b</text>
+      <rect x="66" y="62" width="12" height="12" rx="2.5" fill="${PAPER}"/>`,
+  },
+  {
+    name: 'Canon Shelf',
+    note: 'Nine book spines of different heights: a bookshelf and a bar chart. Filled spines are the books you\'ve read through.',
+    svg: () => {
+      const h = [52, 70, 60, 82, 46, 74, 64, 56, 78];
+      const read = [1, 1, 0.55, 1, 0.3, 0.12, 0.12, 0.12, 0.12];
+      return h.map((hh, i) =>
+        `<rect x="${7 + i * 10}" y="${92 - hh}" width="7" height="${hh}" rx="1.5" fill="${PIG(read[i])}"/>`
+      ).join('') + `<line x1="4" y1="94.5" x2="96" y2="94.5" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+    },
+  },
+  {
+    name: 'Ribbon Marker',
+    note: 'The silk bookmark ribbon from a Bible, with a commit node stitched in. "Here\'s where I am."',
+    svg: () => `
+      <path d="M28 4 H72 V94 L50 74 L28 94 Z" fill="${PIG(1)}"/>
+      <line x1="50" y1="4" x2="50" y2="62" stroke="${PAPER}" stroke-width="4.5"/>
+      <circle cx="50" cy="36" r="10" fill="${PIG(1)}" stroke="${PAPER}" stroke-width="4.5"/>`,
+  },
+  {
+    name: 'Seal',
+    note: 'A press seal with the tagline running round it. Feels like a colophon or a scribe\'s mark. Best used large.',
+    svg: () => `
+      <defs><path id="ring" d="M50 50 m-35 0 a35 35 0 1 1 70 0 a35 35 0 1 1 -70 0"/></defs>
+      <circle cx="50" cy="50" r="46" fill="none" stroke="${PIG(1)}" stroke-width="3"/>
+      <circle cx="50" cy="50" r="26" fill="none" stroke="${PIG(1)}" stroke-width="1.5"/>
+      <text font-family="JetBrains Mono" font-size="8.6" letter-spacing="1.6" fill="${INK}">
+        <textPath href="#ring">COMMIT THE SCRIPTURE YOU READ · </textPath>
+      </text>
+      <text x="50" y="62" text-anchor="middle" font-family="EB Garamond" font-style="italic" font-size="36" fill="${PIG(1)}">bc</text>`,
+  },
+  {
+    name: 'Verse Brackets',
+    note: 'Code braces cradling a filled square: a verse range, committed. Developer-flavoured, very clean at small sizes.',
+    svg: () => `
+      <g fill="none" stroke="${INK}" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M30 14 C18 14 20 30 20 40 C20 46 16 50 10 50 C16 50 20 54 20 60 C20 70 18 86 30 86"/>
+        <path d="M70 14 C82 14 80 30 80 40 C80 46 84 50 90 50 C84 50 80 54 80 60 C80 70 82 86 70 86"/>
+      </g>
+      <rect x="37" y="37" width="26" height="26" rx="5" fill="${PIG(1)}"/>`,
+  },
+  {
+    name: 'Lamp Unto My Feet',
+    note: 'Psalm 119:105. A flame whose base is a commit node on a line: the path lit one step at a time.',
+    svg: () => `
+      <line x1="8" y1="84" x2="92" y2="84" stroke="${INK}" stroke-width="4.5" stroke-linecap="round"/>
+      <g fill="${PAPER}" stroke="${INK}" stroke-width="4.5">
+        <circle cx="16" cy="84" r="5.5"/>
+        <circle cx="84" cy="84" r="5.5"/>
+      </g>
+      <path d="M50 10 C50 10 30 36 30 54 A20 20 0 0 0 70 54 C70 36 50 10 50 10Z" fill="${PIG(1)}"/>
+      <path d="M50 38 C50 38 41 50 41 57 A9 9 0 0 0 59 57 C59 50 50 38 50 38Z" fill="${PAPER}" opacity=".85"/>
+      <line x1="50" y1="74" x2="50" y2="84" stroke="${INK}" stroke-width="4.5"/>`,
+  },
+];
+
+const wrap = (inner, size, cls = '') => `<svg class="${cls}" viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+
+document.getElementById('marks').innerHTML = MARKS.map((m, i) => {
+  const inner = m.svg();
+  const pane = mode => `<div class="pane ${mode}">${wrap(inner, 104, 'mark')}<div class="sizes">${wrap(inner, 32)}${wrap(inner, 16)}</div></div>`;
+  return `<div class="card"><div class="panes">${pane('dark')}${pane('light')}</div>
+    <div class="meta"><h3><span>${String(i + 1).padStart(2, '0')}</span>${m.name}</h3><p>${m.note}</p></div></div>`;
+}).join('');
+
+const heat = MARKS[0].svg();   // reuse for lockups (re-run gives new noise, fine)
+const commitCross = MARKS[1].svg();
+
+const WORDS = [
+  {
+    name: 'Serif + italic',
+    note: 'Matches the app today: EB Garamond, with "commit" in italic pigment. Quiet and literary.',
+    html: `<div class="wm wm-a"><b>Bible</b><i>commit</i></div>`,
+  },
+  {
+    name: 'Cell joiner',
+    note: 'One heatmap cell stands in for the join. The square becomes the brand atom you can reuse everywhere.',
+    html: `<div class="wm wm-b">Bible<span class="cell"></span>commit</div>`,
+  },
+  {
+    name: 'Prompt',
+    note: 'A terminal prompt with a blinking pigment cursor. Leans into the commit metaphor hard; good for a dev-leaning audience.',
+    html: `<div class="wm wm-c"><span class="p">$</span> bible commit<span class="cur"></span></div>`,
+  },
+  {
+    name: 'Inscription',
+    note: 'Wide-tracked caps over a mono tagline, like a title page. Pairs with the Seal mark.',
+    html: `<div class="wm wm-d"><div class="top">Biblecommit</div><div class="bot">commit the scripture you read</div></div>`,
+  },
+  {
+    name: 'Lockup · Heatmap Cross',
+    note: 'Mark 01 beside the serif wordmark. My pick for the primary lockup.',
+    html: `<div class="wm wm-e">${wrap(heat, 44)}<span>Bible<i style="margin-left:.07em">commit</i></span></div>`,
+  },
+  {
+    name: 'Lockup · Commit Cross',
+    note: 'Mark 02 beside the wordmark. More "product", less "paper".',
+    html: `<div class="wm wm-f">${wrap(commitCross, 40)}<span>Biblecommit</span></div>`,
+  },
+];
+
+document.getElementById('words').innerHTML = WORDS.map((w, i) =>
+  `<div class="card wide"><div class="panes"><div class="pane dark">${w.html}</div><div class="pane light">${w.html}</div></div>
+   <div class="meta"><h3><span>${String.fromCharCode(65 + i)}</span>${w.name}</h3><p>${w.note}</p></div></div>`
+).join('');
+</script>
+</body>
+</html>

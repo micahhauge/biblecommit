@@ -130,6 +130,9 @@ header {
   color: var(--dim);
 }
 .mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--serif), serif;
   font-size: 23px;
   color: var(--ink);
@@ -138,6 +141,13 @@ header {
 }
 .mark i {
   color: rgb(var(--pig));
+  /* A sliver of space so the italic c clears the e. */
+  margin-left: 0.07em;
+}
+.mark-icon svg {
+  display: block;
+  width: 30px;
+  height: 30px;
 }
 .toptabs {
   display: flex;
@@ -228,6 +238,11 @@ section {
   }
   .mark {
     font-size: 21px;
+    gap: 8px;
+  }
+  .mark-icon svg {
+    width: 26px;
+    height: 26px;
   }
   header .toptabs {
     display: none;

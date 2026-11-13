@@ -16,6 +16,10 @@ const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['300', '400'], variab
 export const metadata: Metadata = {
   title: 'biblecommit',
   description: 'Commit the Scripture you read.',
+  applicationName: 'biblecommit',
+  // Installed on iOS: run standalone, and draw under the status bar (the header pads for it).
+  appleWebApp: { capable: true, title: 'biblecommit', statusBarStyle: 'black-translucent' },
+  formatDetection: { telephone: false },
 };
 
 /** The mode the browser last chose (system until it chooses), so the first paint is already right. */

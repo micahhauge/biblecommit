@@ -6,6 +6,7 @@ import { ClerkSession } from '@/clerk-session';
 import { TimezoneSync } from '@/me';
 import { ModeSync } from '@/mode';
 import { createQueryClient } from '@/query-client';
+import { ServiceWorker } from '@/service-worker';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(() => createQueryClient());
@@ -14,6 +15,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <ClerkSession />
       <TimezoneSync />
       <ModeSync />
+      <ServiceWorker />
       {children}
     </QueryClientProvider>
   );

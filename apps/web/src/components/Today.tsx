@@ -4,7 +4,11 @@ import { dayLabel, localDate, parse } from '@biblecommit/core';
 import { useEffect, useRef, useState } from 'react';
 import { useCommit, useDeleteCommit, useRecentCommits, type Commit } from '@/commits';
 import { browserTimezone } from '@/guest';
+import { useToday, useYear } from '@/me';
 import { useHasUser } from '@/session';
+import { DaySheet } from './DaySheet';
+import { Notes } from './Notes';
+import { ReadList } from './ReadList';
 import { Streak } from './Streak';
 import styles from './Today.module.css';
 import { YearHeatmap } from './YearHeatmap';
@@ -20,6 +24,8 @@ const INK_MS = 1800;
 
 /** How long "undo" stays up after a commit (unless another commit replaces it). */
 const UNDO_MS = 6000;
+
+type Prefill = { verses: string; key: number };
 
 /** What the preview line shows after a commit, until the input is edited. */
 type Outcome = { kind: 'committed' } | { kind: 'failed'; message: string };
@@ -46,9 +52,21 @@ export function Today() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // The text being committed, replayed as ink sinking into the page.
   const [ink, setInk] = useState<{ key: number; text: string } | null>(null);
+  // The day sheet, if open, and a new note to start there or on Today with a commit's verses.
+  const [day, setDay] = useState<{ date: string; prefill?: Prefill } | null>(null);
+  const [todayPrefill, setTodayPrefill] = useState<Prefill | null>(null);
 
+  const summary = useToday();
+  const year = useYear();
   const parsed = text.trim() ? parse(text, { today: today() }) : null;
   const isNew = !hasUser || (recent.isSuccess && recent.data.length === 0);
+  const todayDate = summary.data?.today ?? today();
+  // Today's readings, oldest first: the day builds downward.
+  const readToday = hasUser ? [...(summary.data?.commits ?? [])].reverse() : [];
+  const versesToday = readToday.reduce((n, c) => n + c.verseCount, 0);
+  // History: everything before today, newest first.
+  const earlier = (recent.data ?? []).filter((c) => c.readOn !== todayDate);
+  const notedDays = new Set(year.data?.days.filter((d) => d.hasNote).map((d) => d.date));
 
   // Desktop: focus on load, and typing anywhere lands in the input.
   useEffect(() => {
@@ -56,6 +74,8 @@ export function Today() {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+      // An open note editor or sheet owns typing.
+      if (document.querySelector('[data-note-editor], [role="dialog"]')) return;
       if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return;
       inputRef.current?.focus();
     };
@@ -88,6 +108,14 @@ export function Today() {
   function deleteCommit(id: string) {
     setUndoable((u) => (u?.id === id ? null : u));
     deletion.mutate(id, { onError: (e) => setOutcome({ kind: 'failed', message: e.message }) });
+  }
+
+  /** A new note for a commit's day, its verses filled in: here for today, else in the day sheet. */
+  function noteOn(c: Commit) {
+    // The display re-parses (raw input may carry a date phrase, which the verses field rejects).
+    const prefill = { verses: c.display, key: Date.now() };
+    if (c.readOn === today()) setTodayPrefill(prefill);
+    else setDay({ date: c.readOn, prefill });
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -167,21 +195,44 @@ export function Today() {
         )}
       </section>
 
+      <section aria-labelledby="today-heading" className={styles.day}>
+        {readToday.length > 0 && (
+          <>
+            <h2 id="today-heading">
+              today <em>{`${versesToday.toLocaleString()} verse${versesToday === 1 ? '' : 's'}`}</em>
+            </h2>
+            <ReadList label="read today" commits={readToday} freshId={freshId} onDelete={(c) => deleteCommit(c.id)} onNote={noteOn} />
+          </>
+        )}
+        <Notes date={todayDate} heading={null} prefill={todayPrefill} />
+      </section>
+
       <Streak />
 
-      <YearHeatmap />
+      <YearHeatmap onOpenDay={(date) => setDay({ date })} />
+
+      {day && <DaySheet date={day.date} today={today()} prefill={day.prefill ?? null} onClose={() => setDay(null)} />}
 
       {undoable && <UndoToast key={undoable.id} commit={undoable} onUndo={() => deleteCommit(undoable.id)} onExpire={() => setUndoable(null)} />}
 
-      {!isNew && (
+      {!isNew && (earlier.length > 0 || recent.hasNextPage || recent.error) && (
         <section>
-          <h2>recent commits</h2>
+          <h2>earlier</h2>
           {recent.error ? (
             <p className="empty">{recent.error.message}</p>
           ) : (
-            <ul aria-label="recent commits" className={styles.log}>
-              {recent.data?.map((c) => (
-                <CommitRow key={c.id} commit={c} fresh={c.id === freshId} onDelete={() => deleteCommit(c.id)} />
+            <ul aria-label="earlier" className={styles.log}>
+              {earlier.map((c, i) => (
+                <CommitRow
+                  key={c.id}
+                  commit={c}
+                  firstOfDay={earlier[i - 1]?.readOn !== c.readOn}
+                  hasNote={notedDays.has(c.readOn)}
+                  fresh={c.id === freshId}
+                  onDelete={() => deleteCommit(c.id)}
+                  onOpenDay={() => setDay({ date: c.readOn })}
+                  onNote={() => noteOn(c)}
+                />
               ))}
             </ul>
           )}
@@ -214,12 +265,34 @@ function UndoToast({ commit, onUndo, onExpire }: { commit: Commit; onUndo: () =>
   );
 }
 
+interface RowProps {
+  commit: Commit;
+  /** Only the day's first row shows its date. */
+  firstOfDay: boolean;
+  /** The day has notes: a mark by the date. */
+  hasNote: boolean;
+  fresh: boolean;
+  onDelete(): void;
+  /** The date opens that day's sheet. */
+  onOpenDay(): void;
+  /** Start a note on the commit's day with its verses. */
+  onNote(): void;
+}
+
 /** One recent commit. × asks "delete?" in place; only "yes" deletes. */
-function CommitRow({ commit, fresh, onDelete }: { commit: Commit; fresh: boolean; onDelete: () => void }) {
+function CommitRow({ commit, firstOfDay, hasNote, fresh, onDelete, onOpenDay, onNote }: RowProps) {
   const [confirming, setConfirming] = useState(false);
+  const when = dayLabel(commit.readOn, today());
   return (
-    <li className={fresh ? styles.fresh : undefined}>
-      <span className={styles.when}>{dayLabel(commit.readOn, today())}</span>
+    <li className={[fresh && styles.fresh, firstOfDay && styles.dayStart].filter(Boolean).join(' ') || undefined}>
+      {firstOfDay ? (
+        <button type="button" className={styles.when} aria-label={`open ${when}${hasNote ? ', has notes' : ''}`} onClick={onOpenDay}>
+          {when}
+          {hasNote && <span className={styles.noteDot} aria-hidden="true" />}
+        </button>
+      ) : (
+        <span aria-hidden="true" />
+      )}
       <span className={styles.passage} data-testid="passage">
         {commit.display}
       </span>
@@ -234,9 +307,14 @@ function CommitRow({ commit, fresh, onDelete }: { commit: Commit; fresh: boolean
           </button>
         </span>
       ) : (
-        <button type="button" className={styles.x} aria-label={`delete ${commit.display}`} onClick={() => setConfirming(true)}>
-          ×
-        </button>
+        <span className={styles.rowActions}>
+          <button type="button" className={styles.x} aria-label={`note on ${commit.display}`} onClick={onNote}>
+            note
+          </button>
+          <button type="button" className={styles.x} aria-label={`delete ${commit.display}`} onClick={() => setConfirming(true)}>
+            ×
+          </button>
+        </span>
       )}
     </li>
   );

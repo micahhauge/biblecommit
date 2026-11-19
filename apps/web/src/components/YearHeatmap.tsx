@@ -19,18 +19,20 @@ const TOP = 16;
 /** Before the first commit: this year, empty, without a request. */
 function emptyYear(): Year {
   const today = localDate(new Date(), browserTimezone());
-  return { today, days: yearDays(today).map((date) => ({ date, verses: 0 })), thresholds: [...FIXED_THRESHOLDS] };
+  return { today, days: yearDays(today).map((date) => ({ date, verses: 0, hasNote: false })), thresholds: [...FIXED_THRESHOLDS] };
 }
 
-function describe(date: string, verses: number, today: string) {
-  return `${dayLabel(date, today)} · ${verses ? `${verses.toLocaleString()} verse${verses === 1 ? '' : 's'}` : 'nothing read'}`;
+function describe(date: string, verses: number, today: string, hasNote = false) {
+  const read = verses ? `${verses.toLocaleString()} verse${verses === 1 ? '' : 's'}` : 'nothing read';
+  return `${dayLabel(date, today)} · ${read}${hasNote ? ' · notes' : ''}`;
 }
 
 /**
- * The last 53 weeks, one wash cell per day, deeper for more verses read. Hover (or tap)
- * a day for its date and verse count. On narrow screens it scrolls sideways, opening on this month.
+ * The last 53 weeks, one wash cell per day, deeper for more verses read, with a small mark
+ * on days that have notes. Hover a day for its date and verse count; click (or tap) it to
+ * open the day. On narrow screens it scrolls sideways, opening on this month.
  */
-export function YearHeatmap() {
+export function YearHeatmap({ onOpenDay }: { onOpenDay?: (date: string) => void } = {}) {
   const hasUser = useHasUser();
   const year = useYear();
   const data = hasUser ? year.data : emptyYear();
@@ -68,7 +70,8 @@ export function YearHeatmap() {
 
   const months: React.ReactNode[] = [];
   const cells: React.ReactNode[] = [];
-  days.forEach(({ date, verses }, i) => {
+  const marks: React.ReactNode[] = [];
+  days.forEach(({ date, verses, hasNote }, i) => {
     const week = Math.floor(i / 7);
     const dow = i % 7;
     const x = LEFT + week * STEP;
@@ -96,9 +99,10 @@ export function YearHeatmap() {
         height={CELL}
         rx={2.4}
       >
-        <title>{describe(date, verses, today)}</title>
+        <title>{describe(date, verses, today, hasNote)}</title>
       </rect>,
     );
+    if (hasNote) marks.push(<circle key={date} data-note={date} className={styles.note} cx={x + CELL - 1.5} cy={y + 1.5} r={2} />);
   });
 
   return (
@@ -113,7 +117,12 @@ export function YearHeatmap() {
           viewBox={`0 0 ${LEFT + weeks * STEP} ${TOP + 7 * STEP}`}
           onMouseOver={(e) => setActive(dayAt(e.target))}
           onMouseLeave={() => setActive(null)}
-          onClick={(e) => setActive(dayAt(e.target))}
+          onClick={(e) => {
+            const i = dayAt(e.target);
+            setActive(i);
+            const d = i === null ? undefined : days[i];
+            if (d && d.date <= today) onOpenDay?.(d.date);
+          }}
         >
           {months}
           {WEEKDAYS.map(
@@ -125,6 +134,7 @@ export function YearHeatmap() {
               ),
           )}
           <g className={styles.cells}>{cells}</g>
+          <g aria-hidden="true">{marks}</g>
         </svg>
       </div>
       <p className={styles.status} data-testid="year-status">

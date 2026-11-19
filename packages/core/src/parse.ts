@@ -69,6 +69,44 @@ export function parse(text: string, { today, readOn }: ParseOptions): ParseResul
   return { ok: true, segments, ranges, display, verseCount, readOn: date, summary };
 }
 
+export type VersesResult =
+  | {
+      ok: true;
+      /** Merged, non-overlapping, in canonical order. Empty when the text is blank. */
+      ranges: VerseRange[];
+      /** Normalized passage, e.g. "Romans 8:28–30"; empty when the text is blank. */
+      display: string;
+      verseCount: number;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Parses a note's verses field: the same passages as `parse`, but optional (blank is no
+ * verses) and with no date phrase, since a note takes its day from where it's written.
+ */
+export function parseVerses(text: string): VersesResult {
+  const tokens = tokenize(text);
+  if (!Array.isArray(tokens)) return tokens;
+  if (tokens.length === 0) return { ok: true, ranges: [], display: '', verseCount: 0 };
+
+  // Any date works here: we only need to know whether there is a date phrase.
+  const dated = extractDate(tokens, '2000-01-01');
+  if (!dated.ok) return dated;
+  if (dated.date !== undefined) return fail('notes take their day from where you write them');
+  const passage = readPassage(dated.tokens);
+  if (!passage.ok) return passage;
+
+  const ranges = merge(passage.ranges);
+  const display = displaySegments(ranges.flatMap(splitByBook));
+  const verseCount = ranges.reduce((n, r) => n + r.end - r.start + 1, 0);
+  return { ok: true, ranges, display, verseCount };
+}
+
+/** Verse ranges as a normalized passage, e.g. "Genesis 1–3; John 3". Merges overlaps; empty for none. */
+export function formatRanges(ranges: readonly VerseRange[]): string {
+  return displaySegments(merge([...ranges]).flatMap(splitByBook));
+}
+
 // ── tokens ──────────────────────────────────────────────────────────────
 
 type Token = { kind: 'num'; n: number; text: string } | { kind: 'word'; text: string } | { kind: 'punct'; text: string };

@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { BOOKS, bucketThresholds, chapterReads, coverage, getBook, isTimezone, localDate, parse, streak, weekOf, TOTAL_CHAPTERS, verseReads, yearDays, YEAR_DAYS, type VerseRange } from '@biblecommit/core';
+import { BOOKS, bucketThresholds, chapterReads, coverage, getBook, getChapter, isTimezone, localDate, NOTE_MAX_LENGTH, noteTitle, parse, parseVerses, streak, weekOf, TOTAL_CHAPTERS, verseReads, yearDays, YEAR_DAYS, type VerseRange } from '@biblecommit/core';
 import type { Context } from 'hono';
 import { hashGuestToken, newGuestToken } from './guest-token';
 
@@ -27,6 +27,35 @@ export const Commit = z
   .openapi('Commit');
 
 export type Commit = z.infer<typeof Commit>;
+
+export const VerseRangeSchema = z
+  .object({
+    start: z.number().int().openapi({ description: 'First verse ID, 1..31102' }),
+    end: z.number().int().openapi({ description: 'Last verse ID, inclusive' }),
+  })
+  .openapi('VerseRange');
+
+export const Note = z
+  .object({
+    id: z.string().uuid(),
+    /** The user's local date the note is written on. */
+    writtenOn: z.iso.date(),
+    /** Markdown. */
+    body: z.string(),
+    /** What a list shows: the first heading, else the first line, markdown stripped. */
+    title: z.string(),
+    /** The verses field as typed; empty with no verses. */
+    verses: z.string(),
+    /** Normalized passage, e.g. "Romans 8:28–30"; empty with no verses. */
+    versesDisplay: z.string(),
+    /** The linked verses: merged, in canonical order. */
+    ranges: z.array(VerseRangeSchema),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .openapi('Note');
+
+export type Note = z.infer<typeof Note>;
 
 export const Segment = z
   .object({
@@ -93,6 +122,8 @@ export const Year = z
           date: z.iso.date(),
           /** Verses read that day, repeats counted. */
           verses: z.number().int(),
+          /** Whether the user wrote at least one note that day. */
+          hasNote: z.boolean(),
         }),
       )
       .length(YEAR_DAYS),
@@ -138,6 +169,8 @@ export const BookReads = z
       z.object({
         /** Read count of each verse (repeats count): index `v` is verse `v + 1`. */
         verses: z.array(z.number().int()),
+        /** How many notes link to each verse: index `v` is verse `v + 1`. */
+        notes: z.array(z.number().int()),
       }),
     ),
   })
@@ -180,6 +213,26 @@ function decodeCursor(cursor: string): CommitPosition | undefined {
   }
 }
 
+/** A note as stored; `title` is derived from the body on the way out. */
+export type StoredNote = Omit<Note, 'title'>;
+
+export interface NewNote {
+  id: string;
+  userId: string;
+  writtenOn: string;
+  body: string;
+  versesInput: string;
+  versesDisplay: string;
+  ranges: VerseRange[];
+  createdAt: Date;
+}
+
+export interface NoteChanges {
+  body?: string;
+  /** Present together: the verses field and what it parsed to. */
+  verses?: { input: string; display: string; ranges: VerseRange[] };
+}
+
 export interface Deps {
   getCanonTotals(): Promise<CanonTotals>;
   createGuest(guest: { tokenHash: string; timezone: string }): Promise<{ id: string }>;
@@ -189,7 +242,7 @@ export interface Deps {
   /**
    * Moves the guest with this token hash to the Clerk user, atomically. If the Clerk user
    * has no row, the guest row adopts the Clerk id and loses its token. Otherwise the guest's
-   * commits are reassigned to the existing row (whose timezone and prefs are kept) and the
+   * commits and notes are reassigned to the existing row (whose timezone and prefs are kept) and the
    * guest row is deleted. No guest with that hash: does nothing.
    */
   claimGuest(clerkUserId: string, guestTokenHash: string): Promise<void>;
@@ -217,6 +270,25 @@ export interface Deps {
    * exclude commits whose `deleted_at` is set.
    */
   deleteCommit(userId: string, id: string, deletedAt: Date): Promise<boolean>;
+  /** Stores a note and its verse ranges atomically. */
+  createNote(note: NewNote): Promise<StoredNote>;
+  /** The user's non-deleted notes written on one local date, oldest first. */
+  listNotesOn(userId: string, writtenOn: string): Promise<StoredNote[]>;
+  /** The user's non-deleted notes with a range overlapping `within`, oldest first. */
+  listNotesTouching(userId: string, within: VerseRange): Promise<StoredNote[]>;
+  /** Distinct dates from `from` to `to` inclusive on which the user has a non-deleted note. */
+  listNoteDays(userId: string, from: string, to: string): Promise<string[]>;
+  /** Every verse range of the user's non-deleted notes overlapping `within`. */
+  listNoteRanges(userId: string, within: VerseRange): Promise<VerseRange[]>;
+  /**
+   * Changes one of the user's non-deleted notes atomically (verses replace all its ranges).
+   * Returns undefined if it doesn't exist, isn't theirs, or is deleted.
+   */
+  updateNote(userId: string, id: string, changes: NoteChanges, updatedAt: Date): Promise<StoredNote | undefined>;
+  /** Soft-deletes one of the user's notes. False if missing, not theirs, or already deleted. */
+  deleteNote(userId: string, id: string, deletedAt: Date): Promise<boolean>;
+  /** Undoes a delete. False if missing, not theirs, or not deleted. */
+  restoreNote(userId: string, id: string): Promise<boolean>;
 }
 
 export interface Options {
@@ -254,7 +326,7 @@ const canonTotalsRoute = createRoute({
 const createGuestRoute = createRoute({
   method: 'post',
   path: '/guests',
-  summary: 'Create a guest user. Called once, right before the first commit.',
+  summary: 'Create a guest user. Called once, right before the first commit or note.',
   request: { body: { required: true, ...json(z.object({ timezone: Timezone }), 'Browser timezone') } },
   responses: {
     201: json(
@@ -327,6 +399,7 @@ const listCommitsRoute = createRoute({
   request: {
     query: z.object({
       cursor: z.string().optional().openapi({ description: '`nextCursor` from the previous page; omit for the first page' }),
+      on: z.iso.date().optional().openapi({ description: 'Only that local date\'s commits, all on one page (no cursor)' }),
     }),
   },
   responses: {
@@ -445,6 +518,93 @@ const bookReadsRoute = createRoute({
   responses: { 200: json(BookReads, 'The book'), 400: json(ErrorBody, 'Invalid book'), 401: unauthorized },
 });
 
+const NoteBody = z.string().max(NOTE_MAX_LENGTH, { message: `a note is at most ${NOTE_MAX_LENGTH.toLocaleString('en-US')} characters` });
+const NoteVerses = z.string().max(500).openapi({ example: 'rom 8:28-30, jn 3:16' });
+const NoteId = z.object({ id: z.string().uuid() });
+
+const listNotesRoute = createRoute({
+  method: 'get',
+  path: '/notes',
+  summary: 'The caller\'s notes on a day, or linked to a chapter; oldest first',
+  description: 'Send `on`, or `bookId` and `chapter`.',
+  security: [{ guest: [] }],
+  request: {
+    query: z.object({
+      on: z.iso.date().optional().openapi({ description: 'A local date' }),
+      bookId: z.coerce.number().int().min(1).max(BOOKS.length).optional(),
+      chapter: z.coerce.number().int().min(1).optional(),
+    }),
+  },
+  responses: {
+    200: json(z.object({ notes: z.array(Note) }).openapi('NoteList'), 'Notes'),
+    400: json(ErrorBody, 'Neither a date nor a chapter, or an unknown chapter'),
+    401: unauthorized,
+  },
+});
+
+const createNoteRoute = createRoute({
+  method: 'post',
+  path: '/notes',
+  summary: 'Write a note on a day. The server parses the verses.',
+  security: [{ guest: [] }],
+  request: {
+    body: {
+      required: true,
+      ...json(
+        z.object({
+          /** Defaults to the user's local today. */
+          writtenOn: z.iso.date().optional(),
+          body: NoteBody,
+          verses: NoteVerses.optional(),
+        }),
+        'The note',
+      ),
+    },
+  },
+  responses: {
+    201: json(Note, 'The created note'),
+    400: json(ErrorBody, 'Invalid body'),
+    401: unauthorized,
+    422: json(ErrorBody, 'The verses could not be parsed, the note is empty, or the date is in the future'),
+  },
+});
+
+const updateNoteRoute = createRoute({
+  method: 'patch',
+  path: '/notes/{id}',
+  summary: 'Edit a note\'s body or verses',
+  security: [{ guest: [] }],
+  request: {
+    params: NoteId,
+    body: { required: true, ...json(z.object({ body: NoteBody.optional(), verses: NoteVerses.optional() }), 'Fields to change') },
+  },
+  responses: {
+    200: json(Note, 'The updated note'),
+    400: json(ErrorBody, 'Invalid body'),
+    401: unauthorized,
+    404: json(ErrorBody, 'No such note for this user'),
+    422: json(ErrorBody, 'The verses could not be parsed, or the note would be empty'),
+  },
+});
+
+const deleteNoteRoute = createRoute({
+  method: 'delete',
+  path: '/notes/{id}',
+  summary: 'Delete a note (soft)',
+  security: [{ guest: [] }],
+  request: { params: NoteId },
+  responses: { 204: { description: 'Deleted' }, 400: json(ErrorBody, 'Invalid id'), 401: unauthorized, 404: json(ErrorBody, 'No such note') },
+});
+
+const restoreNoteRoute = createRoute({
+  method: 'post',
+  path: '/notes/{id}/restore',
+  summary: 'Undo deleting a note',
+  security: [{ guest: [] }],
+  request: { params: NoteId },
+  responses: { 204: { description: 'Restored' }, 400: json(ErrorBody, 'Invalid id'), 401: unauthorized, 404: json(ErrorBody, 'No such deleted note') },
+});
+
 export function createApp(deps: Deps, { now = () => new Date(), verifySession = async () => undefined }: Options = {}) {
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
@@ -515,7 +675,8 @@ export function createApp(deps: Deps, { now = () => new Date(), verifySession = 
   app.openapi(listCommitsRoute, async (c) => {
     const user = await caller(c);
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
-    const { cursor } = c.req.valid('query');
+    const { cursor, on } = c.req.valid('query');
+    if (on !== undefined) return c.json({ commits: await deps.listCommitsOn(user.id, on), nextCursor: null }, 200);
     const after = cursor === undefined ? undefined : decodeCursor(cursor);
     if (cursor !== undefined && !after) return c.json({ error: 'malformed cursor' }, 400);
     // One extra tells us whether there's another page.
@@ -575,9 +736,13 @@ export function createApp(deps: Deps, { now = () => new Date(), verifySession = 
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
     const today = localDate(now(), user.timezone);
     const dates = yearDays(c.req.valid('query').end ?? today);
-    const rows = await deps.dailyVerses(user.id, dates[0]!, dates.at(-1)!);
+    const [rows, noteDays] = await Promise.all([
+      deps.dailyVerses(user.id, dates[0]!, dates.at(-1)!),
+      deps.listNoteDays(user.id, dates[0]!, dates.at(-1)!),
+    ]);
     const verses = new Map(rows.map((r) => [r.readOn, r.verses]));
-    const days = dates.map((date) => ({ date, verses: verses.get(date) ?? 0 }));
+    const noted = new Set(noteDays);
+    const days = dates.map((date) => ({ date, verses: verses.get(date) ?? 0, hasNote: noted.has(date) }));
     return c.json({ today, days, thresholds: bucketThresholds(verses.values()) }, 200);
   });
 
@@ -593,8 +758,88 @@ export function createApp(deps: Deps, { now = () => new Date(), verifySession = 
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
     const { bookId } = c.req.valid('param');
     const book = getBook(bookId)!;
-    const ranges = await deps.listReadRanges(user.id, { start: book.firstVerseId, end: book.lastVerseId });
-    return c.json({ bookId, chapters: verseReads(ranges, bookId).map((verses) => ({ verses })) }, 200);
+    const within = { start: book.firstVerseId, end: book.lastVerseId };
+    const [ranges, noteRanges] = await Promise.all([deps.listReadRanges(user.id, within), deps.listNoteRanges(user.id, within)]);
+    // A note's ranges are merged, so each note counts at most once per verse.
+    const notes = verseReads(noteRanges, bookId);
+    return c.json({ bookId, chapters: verseReads(ranges, bookId).map((verses, i) => ({ verses, notes: notes[i]! })) }, 200);
+  });
+
+  const withTitle = (note: StoredNote): Note => ({ ...note, title: noteTitle(note.body) });
+  const isBlank = (body: string) => body.trim() === '';
+
+  app.openapi(listNotesRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const { on, bookId, chapter } = c.req.valid('query');
+    let notes: StoredNote[];
+    if (on !== undefined) {
+      notes = await deps.listNotesOn(user.id, on);
+    } else if (bookId !== undefined && chapter !== undefined) {
+      const ch = getChapter(bookId, chapter);
+      if (!ch) return c.json({ error: `${getBook(bookId)!.name} has ${getBook(bookId)!.chapterCount} chapters` }, 400);
+      notes = await deps.listNotesTouching(user.id, { start: ch.firstVerseId, end: ch.lastVerseId });
+    } else {
+      return c.json({ error: 'send `on`, or `bookId` and `chapter`' }, 400);
+    }
+    return c.json({ notes: notes.map(withTitle) }, 200);
+  });
+
+  app.openapi(createNoteRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const { writtenOn, body, verses = '' } = c.req.valid('json');
+    const createdAt = now();
+    const today = localDate(createdAt, user.timezone);
+    const day = writtenOn ?? today;
+    if (day > today) return c.json({ error: 'that date is in the future' }, 422);
+    if (isBlank(body)) return c.json({ error: 'the note is empty' }, 422);
+    const parsed = parseVerses(verses);
+    if (!parsed.ok) return c.json({ error: parsed.error }, 422);
+    const note = await deps.createNote({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      writtenOn: day,
+      body,
+      versesInput: verses.trim(),
+      versesDisplay: parsed.display,
+      ranges: parsed.ranges,
+      createdAt,
+    });
+    return c.json(withTitle(note), 201);
+  });
+
+  app.openapi(updateNoteRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    const { body, verses } = c.req.valid('json');
+    const changes: NoteChanges = {};
+    if (body !== undefined) {
+      if (isBlank(body)) return c.json({ error: 'the note is empty' }, 422);
+      changes.body = body;
+    }
+    if (verses !== undefined) {
+      const parsed = parseVerses(verses);
+      if (!parsed.ok) return c.json({ error: parsed.error }, 422);
+      changes.verses = { input: verses.trim(), display: parsed.display, ranges: parsed.ranges };
+    }
+    const note = await deps.updateNote(user.id, c.req.valid('param').id, changes, now());
+    if (!note) return c.json({ error: 'no such note' }, 404);
+    return c.json(withTitle(note), 200);
+  });
+
+  app.openapi(deleteNoteRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    if (!(await deps.deleteNote(user.id, c.req.valid('param').id, now()))) return c.json({ error: 'no such note' }, 404);
+    return c.body(null, 204);
+  });
+
+  app.openapi(restoreNoteRoute, async (c) => {
+    const user = await caller(c);
+    if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
+    if (!(await deps.restoreNote(user.id, c.req.valid('param').id))) return c.json({ error: 'no such deleted note' }, 404);
+    return c.body(null, 204);
   });
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'guest', {

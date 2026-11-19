@@ -99,6 +99,19 @@
   font-family: var(--mono), monospace;
   font-size: 11px;
   color: var(--dim);
+  justify-self: start;
+  text-align: left;
+  padding: 0;
+}
+.when:hover,
+.when:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rowActions {
+  display: inline-flex;
+  gap: 2px;
 }
 .passage {
   font-size: 18px;
@@ -410,4 +423,28 @@
   .toast {
     animation: none;
   }
+}
+
+/* Today's block: what you've read and written today, building downward from the input. */
+.day {
+  margin-top: -4vh;
+}
+/* Earlier: rows grouped by day; a hairline starts each day, its date shown once. */
+.log li {
+  border-bottom: 0;
+}
+.log li.dayStart {
+  border-top: 1px solid var(--hair);
+}
+.log li:not(.dayStart) {
+  padding-top: 0;
+}
+.noteDot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+  vertical-align: 1px;
 }

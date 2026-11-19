@@ -12,11 +12,12 @@ const server = await useTestServer();
 const input = () => screen.getByRole('textbox', { name: /what did you read/i });
 const nudge = () => screen.queryByRole('note');
 
+/** Every passage shown (today's readings and earlier), sorted: commits made in one test instant tie on order. */
 async function passages() {
-  const list = await screen.findByRole('list', { name: /recent commits/i });
-  return within(list)
-    .queryAllByRole('listitem')
-    .map((li) => within(li).getByTestId('passage').textContent);
+  return ['read today', 'earlier']
+    .map((name) => screen.queryByRole('list', { name }))
+    .flatMap((list) => (list ? within(list).queryAllByTestId('passage').map((p) => p.textContent) : []))
+    .sort();
 }
 
 async function commit(user: ReturnType<typeof userEvent.setup>, text: string) {
@@ -60,7 +61,7 @@ describe('signing in', () => {
 
     await signInAs('user_a', client);
 
-    await waitFor(async () => expect(await passages()).toEqual(['John 3', 'Genesis 1']));
+    await waitFor(async () => expect(await passages()).toEqual(['Genesis 1', 'John 3']));
     expect(await server.db.select().from(users)).toHaveLength(1);
   });
 
@@ -73,7 +74,7 @@ describe('signing in', () => {
 
     await commit(user, 'john 3');
 
-    await waitFor(async () => expect(await passages()).toEqual(['John 3', 'Genesis 1']));
+    await waitFor(async () => expect(await passages()).toEqual(['Genesis 1', 'John 3']));
     expect(server.requests).not.toContain('POST /api/me/claim');
     expect(server.requests).not.toContain('POST /api/guests');
     expect(getGuestToken()).toBeNull();
@@ -91,7 +92,8 @@ describe('signing out', () => {
     await signOut(client);
 
     expect(await screen.findByRole('group', { name: /examples/i })).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: /recent commits/i })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'read today' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'earlier' })).toBeNull();
     expect(screen.getByTestId('streak')).toHaveTextContent('0');
     expect(getGuestToken()).toBeNull();
 
@@ -118,7 +120,7 @@ describe('the sign-in nudge', () => {
     // Not on the next load either.
     first.unmount();
     renderPage(<Today />);
-    await screen.findByRole('list', { name: /recent commits/i });
+    await screen.findByRole('list', { name: 'read today' });
     expect(nudge()).toBeNull();
   });
 

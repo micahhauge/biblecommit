@@ -1,6 +1,6 @@
 'use client';
 
-import { NOTE_MAX_LENGTH, parseVerses, readingsAsVerses } from '@biblecommit/core';
+import { joinVerses, NOTE_MAX_LENGTH, parseVerses, splitVerses } from '@biblecommit/core';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useCommitsOn } from '@/commits';
@@ -66,7 +66,8 @@ export function Notes({ date, heading: Heading, prefill }: Props) {
   const isToday = summary.data?.today === date;
   const dayCommits = useCommitsOn(date, summary.isSuccess && !isToday);
   const commitsThatDay = isToday ? summary.data?.commits : dayCommits.data;
-  const readThatDay = readingsAsVerses((hasGuest ? (commitsThatDay ?? []) : []).map((c) => c.display));
+  // The day's readings, oldest first, each once: the editor's chips.
+  const readings = [...new Set((hasGuest ? (commitsThatDay ?? []) : []).map((c) => c.display).reverse())];
   const newSlot = `new.${date}`;
 
   function openNew() {
@@ -101,6 +102,7 @@ export function Notes({ date, heading: Heading, prefill }: Props) {
                 <NoteEditor
                   slot={`edit.${note.id}`}
                   initial={{ body: note.body, verses: note.verses }}
+                  readings={readings}
                   pending={update.isPending}
                   onCancel={() => setEditing(null)}
                   onSave={(draft, done) =>
@@ -120,8 +122,10 @@ export function Notes({ date, heading: Heading, prefill }: Props) {
         <NoteEditor
           key={newSeed ? `seed.${prefill?.key}` : 'blank'}
           slot={newSlot}
-          initial={newSeed ?? { body: '', verses: readThatDay }}
+          initial={newSeed ?? { body: '', verses: '' }}
           seeded={!!newSeed}
+          readings={readings}
+          allByDefault={!newSeed}
           pending={create.isPending}
           onCancel={() => setEditing(null)}
           onSave={(draft, done) =>
@@ -216,6 +220,10 @@ interface EditorProps {
   initial: NoteDraft;
   /** The initial values were handed in (a commit's verses) and beat any stored draft. */
   seeded?: boolean;
+  /** The day's readings (normalized passages, oldest first), offered as one-click chips. */
+  readings: readonly string[];
+  /** A fresh new note: select every reading, including ones that load after it opens, until touched. */
+  allByDefault?: boolean;
   pending: boolean;
   error?: string;
   /** Call `done` once saved, to drop the draft. */
@@ -224,33 +232,65 @@ interface EditorProps {
 }
 
 /**
- * Markdown in a plain textarea, plus an optional verses field read by the commit parser.
+ * Markdown in a plain textarea. Verses are the day's readings as chips (click to toggle)
+ * plus optional other verses typed for the commit parser.
  * ⌘/ctrl+enter saves; esc cancels (and drops the draft). While it's open, it owns typing.
  */
-export function NoteEditor({ slot, initial, seeded, pending, error, onSave, onCancel }: EditorProps) {
-  const [draft, setDraft] = useState<NoteDraft>(() => (!seeded && loadDraft(slot)) || initial);
-  const body = useRef<HTMLTextAreaElement>(null);
-  const verses = parseVerses(draft.verses);
-  const blank = draft.body.trim() === '';
-  const tooLong = draft.body.length > NOTE_MAX_LENGTH;
-  const canSave = !blank && !tooLong && verses.ok && !pending;
+export function NoteEditor({ slot, initial, seeded, readings, allByDefault, pending, error, onSave, onCancel }: EditorProps) {
+  const [start] = useState(() => {
+    const draft = !seeded && loadDraft(slot);
+    return { draft: draft || initial, fromDraft: !!draft };
+  });
+  const [body, setBody] = useState(start.draft.body);
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => {
+    const { selected } = splitVerses(start.draft.verses, readings);
+    return new Set(readings.filter((_, i) => selected[i]));
+  });
+  const [extra, setExtra] = useState(() => splitVerses(start.draft.verses, readings).extra);
+  // Once the verses are touched (or came from a draft), the default stops applying.
+  const [touched, setTouched] = useState(start.fromDraft);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+
+  const readingsKey = readings.join('|');
+  useEffect(() => {
+    // Keyed on the readings' text, not the array, which is new every render.
+    if (allByDefault && !touched) setChosen(new Set(readingsKey ? readingsKey.split('|') : []));
+  }, [readingsKey, allByDefault, touched]);
+
+  const verses = joinVerses(
+    readings.filter((r) => chosen.has(r)),
+    extra,
+  );
+  const extraParsed = parseVerses(extra);
+  const blank = body.trim() === '';
+  const tooLong = body.length > NOTE_MAX_LENGTH;
+  const canSave = !blank && !tooLong && extraParsed.ok && !pending;
 
   useEffect(() => {
-    const el = body.current;
+    const el = textarea.current;
     if (!el) return;
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
 
-  function change(next: Partial<NoteDraft>) {
-    const d = { ...draft, ...next };
-    setDraft(d);
-    saveDraft(slot, d);
+  // Keep the draft (body and the combined verses) as things change.
+  useEffect(() => {
+    if (body || touched) saveDraft(slot, { body, verses });
+  }, [slot, body, verses, touched]);
+
+  function toggle(reading: string) {
+    setTouched(true);
+    setChosen((c) => {
+      const next = new Set(c);
+      if (next.has(reading)) next.delete(reading);
+      else next.add(reading);
+      return next;
+    });
   }
 
   function save() {
     if (!canSave) return;
-    onSave({ body: draft.body, verses: draft.verses.trim() }, () => clearDraft(slot));
+    onSave({ body, verses }, () => clearDraft(slot));
   }
 
   function cancel() {
@@ -272,37 +312,49 @@ export function NoteEditor({ slot, initial, seeded, pending, error, onSave, onCa
 
   return (
     <div className={styles.editor} data-note-editor="" onKeyDown={onKeyDown}>
+      {readings.length > 0 && (
+        <div role="group" aria-label="verses read that day" className={styles.chips}>
+          {readings.map((r) => (
+            <button key={r} type="button" aria-pressed={chosen.has(r)} className={styles.chip} onClick={() => toggle(r)}>
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
       <input
         className={styles.versesInput}
-        aria-label="verses"
-        placeholder="verses (optional), e.g. rom 8:28-30"
+        aria-label={readings.length ? 'other verses' : 'verses'}
+        placeholder={readings.length ? '+ other verses, e.g. isa 53' : 'verses (optional), e.g. rom 8:28-30'}
         autoComplete="off"
         autoCapitalize="off"
         spellCheck={false}
-        value={draft.verses}
-        onChange={(e) => change({ verses: e.target.value })}
+        value={extra}
+        onChange={(e) => {
+          setTouched(true);
+          setExtra(e.target.value);
+        }}
       />
       <div className={styles.parse} aria-live="polite" data-testid="note-verses-preview">
-        {!draft.verses.trim() ? null : verses.ok ? (
-          <span className={styles.ok}>✓ {verses.display}</span>
+        {!extra.trim() ? null : extraParsed.ok ? (
+          <span className={styles.ok}>✓ {extraParsed.display}</span>
         ) : (
-          <span className={styles.err}>? {verses.error}</span>
+          <span className={styles.err}>? {extraParsed.error}</span>
         )}
       </div>
       <textarea
-        ref={body}
+        ref={textarea}
         className={styles.body}
         aria-label="note"
         placeholder="write in markdown…"
         rows={6}
-        value={draft.body}
-        onChange={(e) => change({ body: e.target.value })}
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
       />
       <div className={styles.bar}>
         <span className={styles.hint}>
-          {draft.body.length >= COUNT_FROM && (
+          {body.length >= COUNT_FROM && (
             <span className={tooLong ? styles.err : undefined}>
-              {draft.body.length.toLocaleString()} / {NOTE_MAX_LENGTH.toLocaleString()}
+              {body.length.toLocaleString()} / {NOTE_MAX_LENGTH.toLocaleString()}
             </span>
           )}
           {error && <span className={styles.err}>? {error}</span>}

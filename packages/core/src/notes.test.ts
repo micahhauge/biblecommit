@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { noteTitle, readingsAsVerses } from './notes';
+import { joinVerses, noteTitle, splitVerses } from './notes';
 import { parseVerses } from './parse';
 
 describe('noteTitle', () => {
@@ -44,14 +44,25 @@ describe('parseVerses', () => {
   });
 });
 
-describe('readingsAsVerses', () => {
+describe('splitVerses', () => {
+  const readings = ['Genesis 1–3', 'John 3:16–18', 'Psalm 23'];
   it.each([
-    [[], ''],
-    [['John 3'], 'John 3'],
-    [['Genesis 1', 'Genesis 2', 'John 3:16'], 'Genesis 1–2; John 3:16'],
-    [['John 3:16–18', 'Genesis 1–3', 'John 3'], 'Genesis 1–3; John 3'],
-    [['Romans 8; 1 Corinthians 13', 'Psalms 1, 3, 5', 'Jude'], 'Psalms 1, 3, 5; Romans 8; 1 Corinthians 13; Jude'],
-  ])('%j → %j', (displays, verses) => {
-    expect(readingsAsVerses(displays)).toBe(verses);
+    ['Genesis 1–3; John 3:16–18; Psalm 23', [true, true, true], ''],
+    ['', [false, false, false], ''],
+    ['John 3:16–18', [false, true, false], ''],
+    ['gen 1-3, isa 53', [true, false, false], 'Isaiah 53'],
+    // Part of a reading isn't the reading.
+    ['gen 1', [false, false, false], 'gen 1'],
+    // A reading inside a bigger passage counts, and the rest is left over.
+    ['john 3', [false, true, false], 'John 3:1–15, 3:19–36'],
+    ['jud 1', [false, false, false], 'jud 1'],
+  ])('%j', (verses, selected, extra) => {
+    expect(splitVerses(verses, readings)).toEqual({ selected, extra });
+  });
+
+  it('round-trips through joinVerses', () => {
+    const verses = joinVerses(['Genesis 1–3', 'Psalm 23'], 'isa 53');
+    expect(verses).toBe('Genesis 1–3; Psalm 23; isa 53');
+    expect(splitVerses(verses, readings)).toEqual({ selected: [true, false, true], extra: 'Isaiah 53' });
   });
 });

@@ -11,10 +11,16 @@ const server = await useTestServer();
 
 const notesOnToday = () => screen.getByRole('region', { name: 'notes' });
 const editor = () => ({
-  verses: screen.getByRole('textbox', { name: 'verses' }),
+  /** "verses" when nothing was read that day, "other verses" beside the reading chips. */
+  verses: screen.getByRole('textbox', { name: /^(other )?verses$/ }),
   body: screen.getByRole('textbox', { name: 'note' }),
   save: screen.getByRole('button', { name: /^save/ }),
 });
+/** The reading chips in the open editor (within `container`), as "passage" or "✓ passage" when selected. */
+const chips = (container: HTMLElement = document.body) =>
+  within(within(container).getByRole('group', { name: 'verses read that day' }))
+    .getAllByRole('button')
+    .map((b) => `${b.getAttribute('aria-pressed') === 'true' ? '✓ ' : ''}${b.textContent}`);
 /** The titles of the notes listed in a container, top to bottom. */
 const titles = (container: HTMLElement) =>
   within(container)
@@ -145,26 +151,38 @@ describe('editing and deleting notes', () => {
 });
 
 describe('notes from commits and other days', () => {
-  it('starts a new note on everything read that day, merged and normalized', async () => {
-    await guestWith({ commits: ['john 3:16-18', 'gen 1', 'gen 2-3', 'john 3', 'yesterday ps 1'] });
+  it('offers each of the day\'s readings as a chip, all selected; one click leaves one out', async () => {
+    await guestWith({ commits: ['john 3:16-18', 'gen 1', 'gen 2-3', 'yesterday ps 1'] });
     const user = userEvent.setup();
     renderPage(<Today />);
     await screen.findByText(/committed today/i);
     await user.click(screen.getByRole('button', { name: '+ note' }));
-    expect(editor().verses).toHaveValue('Genesis 1–3; John 3');
+    // Commits in the same instant (the test clock is frozen) tie on order, so compare sorted.
+    expect(chips().sort()).toEqual(['✓ Genesis 1', '✓ Genesis 2–3', '✓ John 3:16–18']);
+    expect(editor().verses).toHaveValue('');
     expect(editor().body).toHaveFocus();
-    // Fine to clear: the verses are only a default.
-    await user.clear(editor().verses);
+
+    await user.click(screen.getByRole('button', { name: 'Genesis 1' }));
+    expect(chips().sort()).toEqual(['Genesis 1', '✓ Genesis 2–3', '✓ John 3:16–18']);
+    await user.type(editor().verses, 'isa 53');
     await user.type(editor().body, 'just a thought');
     await user.click(editor().save);
-    await waitFor(() => expect(titles(within(notesOnToday()).getByRole('list'))).toEqual(['just a thought']));
+    const list = await within(notesOnToday()).findByRole('list');
+    await waitFor(() => expect(titles(list)).toEqual(['just a thought']));
+    expect(within(list).getByText('Genesis 2–3; Isaiah 53; John 3:16–18')).toBeInTheDocument();
 
-    // A past day's sheet defaults to that day's reading.
+    // Editing shows the same chips: the note's readings selected, the rest as other verses.
+    await user.click(screen.getByRole('button', { name: 'edit just a thought' }));
+    expect(chips().sort()).toEqual(['Genesis 1', '✓ Genesis 2–3', '✓ John 3:16–18']);
+    expect(editor().verses).toHaveValue('Isaiah 53');
+    await user.keyboard('{Escape}');
+
+    // A past day's sheet offers that day's readings.
     await user.click(screen.getByRole('button', { name: 'open yesterday' }));
     const sheet = screen.getByRole('dialog', { name: 'yesterday' });
     await within(sheet).findByRole('list', { name: 'read on 2026-11-08' });
     await user.click(within(sheet).getByRole('button', { name: '+ note' }));
-    expect(within(sheet).getByRole('textbox', { name: 'verses' })).toHaveValue('Psalm 1');
+    expect(chips(sheet)).toEqual(['✓ Psalm 1']);
   });
 
   it('starts with no verses when nothing was read, and a draft beats the default', async () => {
@@ -181,6 +199,7 @@ describe('notes from commits and other days', () => {
     renderPage(<Today />);
     await screen.findByText(/committed today/i);
     await user.click(screen.getByRole('button', { name: '+ note' }));
+    expect(chips()).toEqual(['John 1']);
     expect(editor().verses).toHaveValue('isa 53');
   });
 
@@ -189,7 +208,8 @@ describe('notes from commits and other days', () => {
     const user = userEvent.setup();
     renderPage(<Today />);
     await user.click(await screen.findByRole('button', { name: 'note on John 3:16–18' }));
-    expect(editor().verses).toHaveValue('John 3:16–18');
+    expect(chips()).toEqual(['✓ John 3:16–18']);
+    expect(editor().verses).toHaveValue('');
     expect(editor().body).toHaveFocus();
     await user.type(editor().body, 'so loved');
     await user.click(editor().save);
@@ -208,7 +228,8 @@ describe('notes from commits and other days', () => {
 
     // A reading's "note" starts a note in the sheet with its passage.
     await user.click(within(sheet).getByRole('button', { name: 'note on Psalm 2' }));
-    expect(within(sheet).getByRole('textbox', { name: 'verses' })).toHaveValue('Psalm 2');
+    // Same-instant commits tie on order, so compare as a set.
+    expect(chips(sheet).sort()).toEqual(['Psalm 1', '✓ Psalm 2']);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(titles(within(sheet).getByRole('list', { name: 'notes on 2026-11-08' }))).toEqual(['blessed is the man']));
 

@@ -102,6 +102,11 @@ export function parseVerses(text: string): VersesResult {
   return { ok: true, ranges, display, verseCount };
 }
 
+/** Verse ranges as a normalized passage, e.g. "Genesis 1–3; John 3". Merges overlaps; empty for none. */
+export function formatRanges(ranges: readonly VerseRange[]): string {
+  return displaySegments(merge([...ranges]).flatMap(splitByBook));
+}
+
 // ── tokens ──────────────────────────────────────────────────────────────
 
 type Token = { kind: 'num'; n: number; text: string } | { kind: 'word'; text: string } | { kind: 'punct'; text: string };

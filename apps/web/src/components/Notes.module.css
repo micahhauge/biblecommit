@@ -180,3 +180,39 @@
   color: rgb(var(--pig));
   padding: 4px 0 0;
 }
+
+/* The day's readings, one click each to include or leave out of the note. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.chip {
+  font-family: var(--serif), Georgia, serif;
+  font-size: 16px;
+  line-height: 1.2;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--faint);
+  color: var(--dim);
+  transition:
+    background-color 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+.chip[aria-pressed='true'] {
+  border: 1px solid rgb(var(--pig) / 0.6);
+  background: rgb(var(--pig) / 0.14);
+  color: var(--ink);
+}
+.chip[aria-pressed='true']::before {
+  content: '✓ ';
+  color: rgb(var(--pig));
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+}
+.chip:hover,
+.chip:focus-visible {
+  border-color: rgb(var(--pig));
+}

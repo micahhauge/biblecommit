@@ -19,7 +19,7 @@ const TOP = 16;
 /** Before the first commit: this year, empty, without a request. */
 function emptyYear(): Year {
   const today = localDate(new Date(), browserTimezone());
-  return { today, days: yearDays(today).map((date) => ({ date, verses: 0 })), thresholds: [...FIXED_THRESHOLDS] };
+  return { today, days: yearDays(today).map((date) => ({ date, verses: 0, hasNote: false })), thresholds: [...FIXED_THRESHOLDS] };
 }
 
 function describe(date: string, verses: number, today: string) {

@@ -11,7 +11,7 @@ const migrationsFolder = path.join(import.meta.dirname, '../migrations');
 
 export interface TestDb {
   db: Db;
-  /** Empties user data (users, commits, ranges); the canon stays. Call between tests. */
+  /** Empties user data (users, commits, notes, ranges); the canon stays. Call between tests. */
   reset(): Promise<void>;
   close(): Promise<void>;
 }
@@ -28,7 +28,7 @@ export async function createTestDb(): Promise<TestDb> {
   return {
     db,
     reset: async () => {
-      await db.execute(sql`truncate users, commits, commit_ranges cascade`);
+      await db.execute(sql`truncate users, commits, commit_ranges, notes, note_ranges cascade`);
     },
     close: () => client.close(),
   };

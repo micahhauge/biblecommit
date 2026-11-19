@@ -15,6 +15,13 @@
       "when": 1794369262638,
       "tag": "0001_mode_pref_unset",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795056852929,
+      "tag": "0002_notes",
+      "breakpoints": true
     }
   ]
 }

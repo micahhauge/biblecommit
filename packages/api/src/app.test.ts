@@ -649,10 +649,149 @@ describe('POST /api/me/claim', () => {
     expect(await list(signedIn('user_a'))).toEqual([]);
   });
 
+  it('moves the guest\'s notes too, on adopt and on merge, with their verses', async () => {
+    const notesOn = async (auth: Record<string, string>, on: string) =>
+      (await (await app.request(`/api/notes?on=${on}`, { headers: auth })).json()).notes as Array<{ title: string; versesDisplay: string }>;
+
+    // Adopt: the account has no row yet.
+    const first = await newGuest();
+    await post('/api/notes', { body: 'adopted', verses: 'ps 23' }, first);
+    expect((await claim('user_a', tokenOf(first))).status).toBe(204);
+    expect(await notesOn(signedIn('user_a'), '2026-11-09')).toMatchObject([{ title: 'adopted', versesDisplay: 'Psalm 23' }]);
+
+    // Merge: the account exists, so the guest row is deleted; its notes must survive.
+    const second = await newGuest();
+    await post('/api/notes', { body: 'merged', verses: 'jn 1' }, second);
+    expect((await claim('user_a', tokenOf(second))).status).toBe(204);
+    expect((await notesOn(signedIn('user_a'), '2026-11-09')).map((n) => n.title).sort()).toEqual(['adopted', 'merged']);
+    const john = await (await app.request('/api/me/canon/43', { headers: signedIn('user_a') })).json();
+    expect(john.chapters[0].notes[0]).toBe(1);
+  });
+
   it('requires a Clerk session, not a guest token', async () => {
     const guest = await newGuest();
     expect((await post('/api/me/claim', { guestToken: tokenOf(guest) }, guest)).status).toBe(401);
     expect((await post('/api/me/claim', { guestToken: tokenOf(guest) })).status).toBe(401);
     expect((await post('/api/me/claim', {}, signedIn('user_a'))).status).toBe(400);
+  });
+});
+
+describe('notes', () => {
+  function patch(path: string, body: unknown, auth: Record<string, string>) {
+    return app.request(path, { method: 'PATCH', body: JSON.stringify(body), headers: { 'content-type': 'application/json', ...auth } });
+  }
+  async function notesOn(on: string, auth: Record<string, string>) {
+    const res = await app.request(`/api/notes?on=${on}`, { headers: auth });
+    expect(res.status).toBe(200);
+    return (await res.json()).notes as Array<Record<string, unknown>>;
+  }
+
+  it('writes a note on the guest\'s local today, with parsed verses and a title', async () => {
+    const auth = await newGuest('America/Chicago');
+    const res = await post('/api/notes', { body: '# Called\nsome *thoughts*', verses: 'rom 8:28-30, jn 3:16' }, auth);
+    expect(res.status).toBe(201);
+    const note = await res.json();
+    expect(note).toMatchObject({
+      writtenOn: '2026-11-09',
+      title: 'Called',
+      body: '# Called\nsome *thoughts*',
+      verses: 'rom 8:28-30, jn 3:16',
+      versesDisplay: 'John 3:16; Romans 8:28–30',
+    });
+    expect(note.ranges).toHaveLength(2);
+    expect(await notesOn('2026-11-09', auth)).toEqual([note]);
+  });
+
+  it('allows no verses, and a past day, but not a future day', async () => {
+    const auth = await newGuest();
+    const res = await post('/api/notes', { body: 'just a journal', writtenOn: '2026-01-01' }, auth);
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ verses: '', versesDisplay: '', ranges: [] });
+    expect((await post('/api/notes', { body: 'x', writtenOn: '2026-11-10' }, auth)).status).toBe(422);
+  });
+
+  it('rejects verses that don\'t parse, date phrases, empty bodies, and overlong bodies', async () => {
+    const auth = await newGuest();
+    const bad = async (body: unknown, error?: string) => {
+      const res = await post('/api/notes', body, auth);
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      if (error) expect((await res.json()).error).toBe(error);
+    };
+    await bad({ body: 'x', verses: 'jud 1' }, 'Judges or Jude?');
+    await bad({ body: 'x', verses: 'yesterday rom 8' }, 'notes take their day from where you write them');
+    await bad({ body: '  \n ' }, 'the note is empty');
+    await bad({ body: 'x'.repeat(20_001) });
+    expect(await notesOn('2026-11-09', auth)).toEqual([]);
+  });
+
+  it('lists a day\'s notes oldest first, only the caller\'s', async () => {
+    const auth = await newGuest();
+    await post('/api/notes', { body: 'first' }, auth);
+    now = new Date('2026-11-10T03:05:00Z');
+    await post('/api/notes', { body: 'second' }, auth);
+    await post('/api/notes', { body: 'other day', writtenOn: '2026-11-08' }, auth);
+    await post('/api/notes', { body: 'someone else' }, await newGuest());
+    expect((await notesOn('2026-11-09', auth)).map((n) => n.title)).toEqual(['first', 'second']);
+  });
+
+  it('lists notes touching a chapter', async () => {
+    const auth = await newGuest();
+    await post('/api/notes', { body: 'a', verses: 'john 3:16' }, auth);
+    now = new Date('2026-11-10T03:01:00Z');
+    await post('/api/notes', { body: 'b', verses: 'john 2-4' }, auth);
+    await post('/api/notes', { body: 'c', verses: 'john 4' }, auth);
+    await post('/api/notes', { body: 'd' }, auth);
+    const res = await app.request('/api/notes?bookId=43&chapter=3', { headers: auth });
+    expect((await res.json()).notes.map((n: { title: string }) => n.title)).toEqual(['a', 'b']);
+    expect((await app.request('/api/notes?bookId=43&chapter=22', { headers: auth })).status).toBe(400);
+    expect((await app.request('/api/notes', { headers: auth })).status).toBe(400);
+  });
+
+  it('edits the body and swaps the verses', async () => {
+    const auth = await newGuest();
+    const { id } = await (await post('/api/notes', { body: 'old', verses: 'gen 1' }, auth)).json();
+    now = new Date('2026-11-10T04:00:00Z');
+    let res = await patch(`/api/notes/${id}`, { body: 'new', verses: 'ex 3, ex 20' }, auth);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ title: 'new', versesDisplay: 'Exodus 3, 20', updatedAt: '2026-11-10T04:00:00.000Z' });
+    const gen = await app.request('/api/notes?bookId=1&chapter=1', { headers: auth });
+    expect((await gen.json()).notes).toEqual([]);
+
+    res = await patch(`/api/notes/${id}`, { verses: '' }, auth);
+    expect(await res.json()).toMatchObject({ title: 'new', ranges: [], verses: '' });
+    expect((await patch(`/api/notes/${id}`, { verses: 'jud 1' }, auth)).status).toBe(422);
+    expect((await patch(`/api/notes/${id}`, { body: 'x' }, await newGuest())).status).toBe(404);
+  });
+
+  it('deletes and restores a note', async () => {
+    const auth = await newGuest();
+    const { id } = await (await post('/api/notes', { body: 'x' }, auth)).json();
+    expect((await app.request(`/api/notes/${id}`, { method: 'DELETE', headers: await newGuest() })).status).toBe(404);
+    expect((await app.request(`/api/notes/${id}`, { method: 'DELETE', headers: auth })).status).toBe(204);
+    expect(await notesOn('2026-11-09', auth)).toEqual([]);
+    expect((await app.request(`/api/notes/${id}`, { method: 'DELETE', headers: auth })).status).toBe(404);
+    expect((await post(`/api/notes/${id}/restore`, {}, auth)).status).toBe(204);
+    expect(await notesOn('2026-11-09', auth)).toHaveLength(1);
+    expect((await post(`/api/notes/${id}/restore`, {}, auth)).status).toBe(404);
+  });
+
+  it('never counts toward streak, heatmap verses, or coverage, but marks days and verses', async () => {
+    const auth = await newGuest();
+    await post('/api/notes', { body: 'x', verses: 'gen 1:1-3' }, auth);
+    const today = await (await app.request('/api/me/today', { headers: auth })).json();
+    expect(today.streak).toBe(0);
+    const year = await (await app.request('/api/me/year', { headers: auth })).json();
+    const day = year.days.find((d: { date: string }) => d.date === '2026-11-09');
+    expect(day).toEqual({ date: '2026-11-09', verses: 0, hasNote: true });
+    const canon = await (await app.request('/api/me/canon', { headers: auth })).json();
+    expect(canon.coverage).toBe(0);
+    const gen = await (await app.request('/api/me/canon/1', { headers: auth })).json();
+    expect(gen.chapters[0].verses.slice(0, 4)).toEqual([0, 0, 0, 0]);
+    expect(gen.chapters[0].notes.slice(0, 4)).toEqual([1, 1, 1, 0]);
+  });
+
+  it('requires a guest token', async () => {
+    expect((await post('/api/notes', { body: 'x' })).status).toBe(401);
+    expect((await app.request('/api/notes?on=2026-11-09')).status).toBe(401);
   });
 });

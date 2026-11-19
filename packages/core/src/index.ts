@@ -5,3 +5,4 @@ export * from './dates';
 export * from './streak';
 export * from './year';
 export * from './canon-reads';
+export * from './notes';

@@ -1,13 +1,14 @@
 'use client';
 
 import { dayLabel } from '@biblecommit/core';
-import { useId, useRef } from 'react';
+import { useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useCommitsOn } from '@/commits';
+import { useCommitsOn, useDeleteCommit } from '@/commits';
 import { useHasGuest } from '@/guest';
 import { useSheet } from '@/use-sheet';
 import sheet from './BookSheet.module.css';
 import { Notes } from './Notes';
+import { ReadList } from './ReadList';
 import styles from './DaySheet.module.css';
 
 interface Props {
@@ -34,7 +35,12 @@ export function DaySheet({ date, today, prefill, onClose }: Props) {
   useSheet(dialog, onClose);
   const hasGuest = useHasGuest();
   const commits = useCommitsOn(date);
-  const list = hasGuest ? commits.data : [];
+  const deletion = useDeleteCommit();
+  // Oldest first, as on Today.
+  const list = hasGuest ? commits.data && [...commits.data].reverse() : [];
+  // A commit's "note" starts a note here with its passage.
+  const [notePrefill, setNotePrefill] = useState(prefill ?? null);
+  const [error, setError] = useState<string | null>(null);
   const verses = list?.reduce((n, c) => n + c.verseCount, 0) ?? 0;
 
   return createPortal(
@@ -59,14 +65,19 @@ export function DaySheet({ date, today, prefill, onClose }: Props) {
         ) : list.length === 0 ? (
           <p className={styles.quiet}>nothing committed</p>
         ) : (
-          <ul aria-label={`read on ${date}`} className={styles.read}>
-            {list.map((c) => (
-              <li key={c.id}>{c.display}</li>
-            ))}
-          </ul>
+          <ReadList
+            label={`read on ${date}`}
+            commits={list}
+            onDelete={(c) => {
+              setError(null);
+              deletion.mutate(c.id, { onError: (e) => setError(e.message) });
+            }}
+            onNote={(c) => setNotePrefill({ verses: c.display, key: Date.now() })}
+          />
         )}
+        {error && <p className={styles.quiet}>? {error}</p>}
 
-        <Notes date={date} heading="h4" prefill={prefill} />
+        <Notes date={date} heading="h4" prefill={notePrefill} />
       </div>
     </>,
     document.body,

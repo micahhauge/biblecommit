@@ -4,8 +4,10 @@ import { dayLabel, localDate, parse } from '@biblecommit/core';
 import { useEffect, useRef, useState } from 'react';
 import { useCommit, useDeleteCommit, useRecentCommits, type Commit } from '@/commits';
 import { browserTimezone, useHasGuest } from '@/guest';
+import { useToday, useYear } from '@/me';
 import { DaySheet } from './DaySheet';
 import { Notes } from './Notes';
+import { ReadList } from './ReadList';
 import { Streak } from './Streak';
 import styles from './Today.module.css';
 import { YearHeatmap } from './YearHeatmap';
@@ -53,8 +55,17 @@ export function Today() {
   const [day, setDay] = useState<{ date: string; prefill?: Prefill } | null>(null);
   const [todayPrefill, setTodayPrefill] = useState<Prefill | null>(null);
 
+  const summary = useToday();
+  const year = useYear();
   const parsed = text.trim() ? parse(text, { today: today() }) : null;
   const isNew = !hasGuest || (recent.isSuccess && recent.data.length === 0);
+  const todayDate = summary.data?.today ?? today();
+  // Today's readings, oldest first: the day builds downward.
+  const readToday = hasGuest ? [...(summary.data?.commits ?? [])].reverse() : [];
+  const versesToday = readToday.reduce((n, c) => n + c.verseCount, 0);
+  // History: everything before today, newest first.
+  const earlier = (recent.data ?? []).filter((c) => c.readOn !== todayDate);
+  const notedDays = new Set(year.data?.days.filter((d) => d.hasNote).map((d) => d.date));
 
   // Desktop: focus on load, and typing anywhere lands in the input.
   useEffect(() => {
@@ -183,7 +194,17 @@ export function Today() {
         )}
       </section>
 
-      <Notes date={today()} heading="h2" prefill={todayPrefill} />
+      <section aria-labelledby="today-heading" className={styles.day}>
+        {readToday.length > 0 && (
+          <>
+            <h2 id="today-heading">
+              today <em>{`${versesToday.toLocaleString()} verse${versesToday === 1 ? '' : 's'}`}</em>
+            </h2>
+            <ReadList label="read today" commits={readToday} freshId={freshId} onDelete={(c) => deleteCommit(c.id)} onNote={noteOn} />
+          </>
+        )}
+        <Notes date={todayDate} heading={null} prefill={todayPrefill} />
+      </section>
 
       <Streak />
 
@@ -193,17 +214,19 @@ export function Today() {
 
       {undoable && <UndoToast key={undoable.id} commit={undoable} onUndo={() => deleteCommit(undoable.id)} onExpire={() => setUndoable(null)} />}
 
-      {!isNew && (
+      {!isNew && (earlier.length > 0 || recent.hasNextPage || recent.error) && (
         <section>
-          <h2>recent commits</h2>
+          <h2>earlier</h2>
           {recent.error ? (
             <p className="empty">{recent.error.message}</p>
           ) : (
-            <ul aria-label="recent commits" className={styles.log}>
-              {recent.data?.map((c) => (
+            <ul aria-label="earlier" className={styles.log}>
+              {earlier.map((c, i) => (
                 <CommitRow
                   key={c.id}
                   commit={c}
+                  firstOfDay={earlier[i - 1]?.readOn !== c.readOn}
+                  hasNote={notedDays.has(c.readOn)}
                   fresh={c.id === freshId}
                   onDelete={() => deleteCommit(c.id)}
                   onOpenDay={() => setDay({ date: c.readOn })}
@@ -243,6 +266,10 @@ function UndoToast({ commit, onUndo, onExpire }: { commit: Commit; onUndo: () =>
 
 interface RowProps {
   commit: Commit;
+  /** Only the day's first row shows its date. */
+  firstOfDay: boolean;
+  /** The day has notes: a mark by the date. */
+  hasNote: boolean;
   fresh: boolean;
   onDelete(): void;
   /** The date opens that day's sheet. */
@@ -252,14 +279,19 @@ interface RowProps {
 }
 
 /** One recent commit. × asks "delete?" in place; only "yes" deletes. */
-function CommitRow({ commit, fresh, onDelete, onOpenDay, onNote }: RowProps) {
+function CommitRow({ commit, firstOfDay, hasNote, fresh, onDelete, onOpenDay, onNote }: RowProps) {
   const [confirming, setConfirming] = useState(false);
   const when = dayLabel(commit.readOn, today());
   return (
-    <li className={fresh ? styles.fresh : undefined}>
-      <button type="button" className={styles.when} aria-label={`open ${when}`} onClick={onOpenDay}>
-        {when}
-      </button>
+    <li className={[fresh && styles.fresh, firstOfDay && styles.dayStart].filter(Boolean).join(' ') || undefined}>
+      {firstOfDay ? (
+        <button type="button" className={styles.when} aria-label={`open ${when}${hasNote ? ', has notes' : ''}`} onClick={onOpenDay}>
+          {when}
+          {hasNote && <span className={styles.noteDot} aria-hidden="true" />}
+        </button>
+      ) : (
+        <span aria-hidden="true" />
+      )}
       <span className={styles.passage} data-testid="passage">
         {commit.display}
       </span>

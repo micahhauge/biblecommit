@@ -165,3 +165,18 @@
 .toast button {
   color: rgb(var(--pig));
 }
+
+/* About six lines of a long note, fading into the paper. */
+.clampBox {
+  max-height: calc(18px * 1.55 * 6);
+  overflow: hidden;
+}
+.faded {
+  mask-image: linear-gradient(to bottom, #000 65%, transparent);
+}
+.more {
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: rgb(var(--pig));
+  padding: 4px 0 0;
+}

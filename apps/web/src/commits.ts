@@ -4,7 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteD
 import { api } from '@/api/client';
 import type { components } from '@/api/schema';
 import { browserTimezone, getGuestToken, guestAuthorization, setGuestToken, useHasGuest } from '@/guest';
-import { invalidateReading } from '@/me';
+import { invalidateReading, todayKey, type TodaySummary } from '@/me';
 
 export type Commit = components['schemas']['Commit'];
 type Page = components['schemas']['CommitList'];
@@ -70,6 +70,10 @@ export function useCommit({ onSaved }: { onSaved?: (commit: Commit) => void } = 
       if (existing) {
         const commit = await postCommit(text, existing);
         onSaved?.(commit);
+        // Show it in today's list at once; the refetch below confirms it.
+        queryClient.setQueryData<TodaySummary>(todayKey, (t) =>
+          t && commit.readOn === t.today && !t.commits.some((c) => c.id === commit.id) ? { ...t, commits: [commit, ...t.commits] } : t,
+        );
         await Promise.all([invalidateCommitLists(queryClient), invalidateReading(queryClient)]);
         return commit;
       }
@@ -123,9 +127,17 @@ export function useDeleteCommit() {
           }),
         },
       );
-      return { removed };
+      // Today's list and any open day's list drop it too.
+      await Promise.all([todayKey, dayCommitsKey].map((queryKey) => queryClient.cancelQueries({ queryKey })));
+      const today = queryClient.getQueryData<TodaySummary>(todayKey);
+      const days = queryClient.getQueriesData<Commit[]>({ queryKey: dayCommitsKey });
+      queryClient.setQueryData<TodaySummary>(todayKey, (t) => t && { ...t, commits: t.commits.filter((c) => c.id !== id) });
+      queryClient.setQueriesData<Commit[]>({ queryKey: dayCommitsKey }, (list) => list?.filter((c) => c.id !== id));
+      return { removed, today, days };
     },
     onError: (_e, _id, context) => {
+      if (context?.today) queryClient.setQueryData(todayKey, context.today);
+      context?.days.forEach(([key, data]) => queryClient.setQueryData(key, data));
       const removed = context?.removed;
       if (!removed) return;
       queryClient.setQueryData<Recent>(recentKey, (data) =>

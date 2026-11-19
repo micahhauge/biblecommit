@@ -1,15 +1,6 @@
 .heading {
   margin-top: 0 !important;
 }
-.read {
-  list-style: none;
-  padding: 0;
-  margin: 12px 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  font-size: 20px;
-}
 .quiet {
   font-family: var(--mono), monospace;
   font-size: 12px;

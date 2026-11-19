@@ -99,15 +99,17 @@ The parser returns structured segments plus a normalized display string (`2 Samu
 ## 3. Screens
 
 ### Today
-1. Commit input: auto-focused on desktop; typing anywhere focuses it. Live preview line underneath. `enter` commit · `esc` clear · `↑` recall last. On touch devices a "commit ↵" button appears once the input parses.
+1. Commit input: auto-focused on desktop; typing anywhere focuses it (not while a note editor or sheet is open). Live preview line underneath. `enter` commit · `esc` clear · `↑` recall last. On touch devices a "commit ↵" button appears once the input parses.
 2. New users see example chips (`john 1`, `psalm 23`, `gen 1-3`) instead of history.
-3. Notes, right under the input: today's notes and "+ note".
+3. **Today block**, right under the input: what you've done today, building downward. A `today · N verses` header and today's readings, oldest first (each with "note" and × with inline confirm), then today's notes and "+ note". With nothing yet, just "+ note". A new commit washes into this list.
 4. Streak: number, status ("committed today" / "nothing committed yet today"), this week's dots.
 5. The year heatmap. Hover (desktop) shows date · verses; click or tap opens the day sheet.
-6. Recent commits: date and normalized passage, with delete (inline confirm). Last 10, then "load more". Each commit has a "note" action: a new note on that commit's day, verses prefilled from the commit.
+6. **Earlier:** recent commits before today, grouped by day (date shown once, with a dot if the day has notes; the date opens the day sheet), each with "note" and delete. Last 10 commits, then "load more".
+
+Long notes show about six lines, fading out, with "more".
 
 ### Day sheet
-Opened from a heatmap cell or a commit's date, like the book sheet. Shows that day's commits and notes, and "+ note" for that day. Days with notes get a subtle mark on the heatmap. On mobile the note editor is a full-height sheet.
+Opened from a heatmap cell or a date in Earlier, like the book sheet. Shows that day's readings (same list as Today's, with note and delete) and notes, and "+ note" for that day. Days with notes get a subtle mark on the heatmap. On mobile the note editor is a full-height sheet.
 
 ### Canon
 1. Coverage %, chapter count, "chapters read more than once".

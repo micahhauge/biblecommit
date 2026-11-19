@@ -1,7 +1,7 @@
 'use client';
 
 import { NOTE_MAX_LENGTH, parseVerses, readingsAsVerses } from '@biblecommit/core';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useCommitsOn } from '@/commits';
 import { useHasGuest } from '@/guest';
@@ -32,8 +32,8 @@ const isMac = () => typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(
 interface Props {
   /** The local date the notes are written on. */
   date: string;
-  /** Section heading level: a page section (Today) or inside a sheet. */
-  heading: 'h2' | 'h4';
+  /** Section heading level: a page section, inside a sheet, or none (inside a day's block). */
+  heading: 'h2' | 'h4' | null;
   /** Open a new note with this verses field filled in (from a commit's "note" action). Changes reopen it. */
   prefill?: { verses: string; key: number } | null;
 }
@@ -86,10 +86,12 @@ export function Notes({ date, heading: Heading, prefill }: Props) {
   }
 
   return (
-    <section aria-labelledby={headingId} className={styles.notes}>
-      <Heading id={headingId} className={Heading === 'h4' ? styles.sheetHeading : undefined}>
-        notes
-      </Heading>
+    <section aria-labelledby={Heading ? headingId : undefined} aria-label={Heading ? undefined : 'notes'} className={styles.notes}>
+      {Heading && (
+        <Heading id={headingId} className={Heading === 'h4' ? styles.sheetHeading : undefined}>
+          notes
+        </Heading>
+      )}
       {notes.error && hasGuest ? <p className="empty">{notes.error.message}</p> : null}
       {list.length > 0 && (
         <ul aria-label={`notes on ${date}`} className={styles.list}>
@@ -155,7 +157,9 @@ function NoteItem({ note, onEdit, onDelete }: { note: Note; onEdit: () => void; 
   return (
     <li className={styles.note} aria-label={label}>
       {note.versesDisplay && <div className={styles.verses}>{note.versesDisplay}</div>}
-      <Markdown>{note.body}</Markdown>
+      <Clamped>
+        <Markdown>{note.body}</Markdown>
+      </Clamped>
       <div className={styles.actions}>
         {confirming ? (
           <span className={styles.confirm}>
@@ -179,6 +183,30 @@ function NoteItem({ note, onEdit, onDelete }: { note: Note; onEdit: () => void; 
         )}
       </div>
     </li>
+  );
+}
+
+/** Long notes show about six lines, fading out, with "more" to read the rest. */
+function Clamped({ children }: { children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [open, setOpen] = useState(false);
+  // Measure while clamped; once open, keep the answer.
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (el && !open) setOverflows(el.scrollHeight > el.clientHeight + 1);
+  });
+  return (
+    <>
+      <div ref={box} className={`${open ? '' : styles.clampBox} ${overflows && !open ? styles.faded : ''}`}>
+        {children}
+      </div>
+      {overflows && (
+        <button type="button" className={styles.more} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          {open ? 'less' : 'more'}
+        </button>
+      )}
+    </>
   );
 }
 

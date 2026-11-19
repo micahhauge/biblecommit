@@ -200,11 +200,16 @@ describe('notes from commits and other days', () => {
     await guestWith({ commits: ['yesterday ps 1', 'yesterday ps 2'], notes: [{ body: 'blessed is the man', writtenOn: '2026-11-08' }] });
     const user = userEvent.setup();
     renderPage(<Today />);
-    await user.click((await screen.findAllByRole('button', { name: 'open yesterday' }))[0]!);
+    await user.click(await screen.findByRole('button', { name: 'open yesterday, has notes' }));
     const sheet = screen.getByRole('dialog', { name: 'yesterday' });
     expect(within(sheet).getByText(/sunday, november 8, 2026/)).toBeInTheDocument();
     const read = await within(sheet).findByRole('list', { name: 'read on 2026-11-08' });
-    await waitFor(() => expect(within(read).getAllByRole('listitem').map((li) => li.textContent).sort()).toEqual(['Psalm 1', 'Psalm 2']));
+    await waitFor(() => expect(within(read).getAllByTestId('passage').map((p) => p.textContent).sort()).toEqual(['Psalm 1', 'Psalm 2']));
+
+    // A reading's "note" starts a note in the sheet with its passage.
+    await user.click(within(sheet).getByRole('button', { name: 'note on Psalm 2' }));
+    expect(within(sheet).getByRole('textbox', { name: 'verses' })).toHaveValue('Psalm 2');
+    await user.keyboard('{Escape}');
     await waitFor(() => expect(titles(within(sheet).getByRole('list', { name: 'notes on 2026-11-08' }))).toEqual(['blessed is the man']));
 
     // A note written here is on that day; esc in the editor leaves the sheet open.
@@ -232,6 +237,26 @@ describe('notes from commits and other days', () => {
     await user.click(cell);
     const sheet = screen.getByRole('dialog', { name: 'nov 2' });
     await waitFor(() => expect(titles(within(sheet).getByRole('list', { name: 'notes on 2026-11-02' }))).toEqual(['a quiet day']));
+  });
+});
+
+describe('today, then earlier', () => {
+  it('lists today\'s readings oldest first with its notes, and earlier days grouped, dated once', async () => {
+    await guestWith({
+      commits: ['3 days ago gen 1', '3 days ago gen 2', 'yesterday ps 1', 'john 1', 'john 2'],
+      notes: [{ body: 'today\'s thought' }, { body: 'older thought', writtenOn: '2026-11-06' }],
+    });
+    renderPage(<Today />);
+    const today = await screen.findByRole('list', { name: 'read today' });
+    await waitFor(() => expect(within(today).getAllByTestId('passage').map((p) => p.textContent).sort()).toEqual(['John 1', 'John 2']));
+    expect(screen.getByRole('heading', { name: /today\s*76 verses/ })).toBeInTheDocument();
+    await waitFor(() => expect(titles(within(notesOnToday()).getByRole('list'))).toEqual(['today\'s thought']));
+
+    const earlier = await screen.findByRole('list', { name: 'earlier' });
+    await waitFor(() => expect(within(earlier).getAllByTestId('passage')).toHaveLength(3));
+    expect(within(earlier).queryByText('John 1')).toBeNull();
+    const dates = within(earlier).getAllByRole('button', { name: /^open / });
+    await waitFor(() => expect(dates.map((d) => d.getAttribute('aria-label'))).toEqual(['open yesterday', 'open nov 6, has notes']));
   });
 });
 

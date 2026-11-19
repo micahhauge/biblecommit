@@ -145,6 +145,45 @@ describe('editing and deleting notes', () => {
 });
 
 describe('notes from commits and other days', () => {
+  it('starts a new note on everything read that day, merged and normalized', async () => {
+    await guestWith({ commits: ['john 3:16-18', 'gen 1', 'gen 2-3', 'john 3', 'yesterday ps 1'] });
+    const user = userEvent.setup();
+    renderPage(<Today />);
+    await screen.findByText(/committed today/i);
+    await user.click(screen.getByRole('button', { name: '+ note' }));
+    expect(editor().verses).toHaveValue('Genesis 1–3; John 3');
+    expect(editor().body).toHaveFocus();
+    // Fine to clear: the verses are only a default.
+    await user.clear(editor().verses);
+    await user.type(editor().body, 'just a thought');
+    await user.click(editor().save);
+    await waitFor(() => expect(titles(within(notesOnToday()).getByRole('list'))).toEqual(['just a thought']));
+
+    // A past day's sheet defaults to that day's reading.
+    await user.click(screen.getByRole('button', { name: 'open yesterday' }));
+    const sheet = screen.getByRole('dialog', { name: 'yesterday' });
+    await within(sheet).findByRole('list', { name: 'read on 2026-11-08' });
+    await user.click(within(sheet).getByRole('button', { name: '+ note' }));
+    expect(within(sheet).getByRole('textbox', { name: 'verses' })).toHaveValue('Psalm 1');
+  });
+
+  it('starts with no verses when nothing was read, and a draft beats the default', async () => {
+    await guestWith({});
+    const user = userEvent.setup();
+    const page = renderPage(<Today />);
+    await screen.findByText(/nothing committed yet today/i);
+    await user.click(screen.getByRole('button', { name: '+ note' }));
+    expect(editor().verses).toHaveValue('');
+    await user.type(editor().verses, 'isa 53');
+    page.unmount();
+
+    await api.POST('/api/commits', { body: { text: 'john 1' } });
+    renderPage(<Today />);
+    await screen.findByText(/committed today/i);
+    await user.click(screen.getByRole('button', { name: '+ note' }));
+    expect(editor().verses).toHaveValue('isa 53');
+  });
+
   it('starts a note from today\'s commit with its verses filled in', async () => {
     await guestWith({ commits: ['yesterday ps 1', 'john 3:16-18'] });
     const user = userEvent.setup();

@@ -144,11 +144,11 @@ export function useDeleteCommit() {
 }
 
 /** One day's commits, newest first. Never fetches until this browser has a guest (or account). */
-export function useCommitsOn(date: string) {
+export function useCommitsOn(date: string, enabled = true) {
   const hasGuest = useHasGuest();
   return useQuery({
     queryKey: [...dayCommitsKey, date],
-    enabled: hasGuest,
+    enabled: hasGuest && enabled,
     queryFn: async () => {
       const { data, error } = await api.GET('/api/commits', { params: { query: { on: date } } });
       if (error || !data) throw new Error('could not load that day');

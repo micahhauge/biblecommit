@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { noteTitle } from './notes';
+import { noteTitle, readingsAsVerses } from './notes';
 import { parseVerses } from './parse';
 
 describe('noteTitle', () => {
@@ -41,5 +41,17 @@ describe('parseVerses', () => {
   it('returns merged verse-ID ranges', () => {
     const r = parseVerses('gen 1:1-3, gen 1:2-5');
     expect(r.ok && r.ranges).toEqual([{ start: 1, end: 5 }]);
+  });
+});
+
+describe('readingsAsVerses', () => {
+  it.each([
+    [[], ''],
+    [['John 3'], 'John 3'],
+    [['Genesis 1', 'Genesis 2', 'John 3:16'], 'Genesis 1–2; John 3:16'],
+    [['John 3:16–18', 'Genesis 1–3', 'John 3'], 'Genesis 1–3; John 3'],
+    [['Romans 8; 1 Corinthians 13', 'Psalms 1, 3, 5', 'Jude'], 'Psalms 1, 3, 5; Romans 8; 1 Corinthians 13; Jude'],
+  ])('%j → %j', (displays, verses) => {
+    expect(readingsAsVerses(displays)).toBe(verses);
   });
 });

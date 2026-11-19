@@ -1,3 +1,5 @@
+import { parseVerses } from './parse';
+
 /** Longest note body, in characters. */
 export const NOTE_MAX_LENGTH = 20_000;
 
@@ -29,4 +31,13 @@ function stripInline(text: string): string {
     .replace(/(\*|_)(.+?)\1/g, '$2')
     .replace(/~~(.+?)~~/g, '$1')
     .trim();
+}
+
+/**
+ * A day's readings as one verses field: the commits' passages merged and normalized,
+ * e.g. ["Genesis 1", "Genesis 2", "John 3:16"] → "Genesis 1–2; John 3:16". Empty with none.
+ */
+export function readingsAsVerses(displays: readonly string[]): string {
+  const parsed = parseVerses(displays.filter((d) => d.trim()).join('; '));
+  return parsed.ok ? parsed.display : '';
 }

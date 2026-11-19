@@ -1,9 +1,11 @@
 'use client';
 
-import { NOTE_MAX_LENGTH, parseVerses } from '@biblecommit/core';
+import { NOTE_MAX_LENGTH, parseVerses, readingsAsVerses } from '@biblecommit/core';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useCommitsOn } from '@/commits';
 import { useHasGuest } from '@/guest';
+import { useToday } from '@/me';
 import {
   clearDraft,
   loadDraft,
@@ -58,6 +60,13 @@ export function Notes({ date, heading: Heading, prefill }: Props) {
   }, [prefill]);
 
   const list = hasGuest ? (notes.data ?? []) : [];
+  // A new note is about everything read that day, unless a draft or a commit says otherwise.
+  // Today's commits come with the streak (already loaded on Today); other days are fetched.
+  const summary = useToday();
+  const isToday = summary.data?.today === date;
+  const dayCommits = useCommitsOn(date, summary.isSuccess && !isToday);
+  const commitsThatDay = isToday ? summary.data?.commits : dayCommits.data;
+  const readThatDay = readingsAsVerses((hasGuest ? (commitsThatDay ?? []) : []).map((c) => c.display));
   const newSlot = `new.${date}`;
 
   function openNew() {
@@ -109,7 +118,7 @@ export function Notes({ date, heading: Heading, prefill }: Props) {
         <NoteEditor
           key={newSeed ? `seed.${prefill?.key}` : 'blank'}
           slot={newSlot}
-          initial={newSeed ?? { body: '', verses: '' }}
+          initial={newSeed ?? { body: '', verses: readThatDay }}
           seeded={!!newSeed}
           pending={create.isPending}
           onCancel={() => setEditing(null)}

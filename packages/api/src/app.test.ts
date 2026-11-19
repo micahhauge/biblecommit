@@ -795,3 +795,13 @@ describe('notes', () => {
     expect((await app.request('/api/notes?on=2026-11-09')).status).toBe(401);
   });
 });
+
+describe('GET /api/commits?on=', () => {
+  it('lists one day\'s commits, newest first, on one page', async () => {
+    const auth = await newGuest();
+    await post('/api/commits', { text: 'gen 1', readOn: '2026-11-01' }, auth);
+    await post('/api/commits', { text: 'gen 2' }, auth);
+    const res = await app.request('/api/commits?on=2026-11-01', { headers: auth });
+    expect(await res.json()).toMatchObject({ commits: [{ display: 'Genesis 1' }], nextCursor: null });
+  });
+});

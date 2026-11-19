@@ -86,10 +86,10 @@ The parser returns structured segments plus a normalized display string (`2 Samu
 - A **note** is markdown you write on a day (`written_on`), optionally linked to verses. A day can have many notes. Notes are not linked to commits.
 - Notes never touch streak, heatmap intensity, or coverage. Only commits are reading.
 - Notes are always private (friends, when they ship, never see them). Guests can write notes; claim moves them like commits.
-- **Body:** GitHub-flavored markdown, ≤ 20,000 chars. Raw HTML disabled, output sanitized. Links open in a new tab (`rel="noopener noreferrer"`). No title: lists show the first heading, else the first line, markdown stripped.
-- **Verses:** an optional field parsed by the commit parser, with the same live errors; save is blocked while it doesn't parse. Any verse is allowed, not just ones read that day. Date phrases in it are an error ("notes take their day from where you write them"). Overlaps are merged, as in commits.
+- **Body:** GitHub-flavored markdown, ≤ 20,000 chars, not blank. Raw HTML disabled, output sanitized. Links open in a new tab (`rel="noopener noreferrer"`). No title: lists show the first heading, else the first line, markdown stripped.
+- **Verses:** the editor shows each of the day's readings as a chip; one click includes or leaves it out. A new note starts with every reading selected; a commit's "note" action selects just that commit; editing selects the readings the note covers. Below the chips, an optional "other verses" field takes anything else, parsed by the commit parser with the same live errors (save is blocked while it doesn't parse). Any verse is allowed. Date phrases are an error ("notes take their day from where you write them"). Overlaps are merged, as in commits. An unsaved draft beats the defaults.
 - **Day:** taken from where the note is written (today on Today, the sheet's date in the day sheet). Future days are rejected. A note can't move to another day; delete and rewrite.
-- **Edit:** body and verses are editable. Delete is soft, with inline confirm and an undo toast.
+- **Edit:** body and verses are editable. Delete is soft, with inline confirm and an undo toast (undo restores the note).
 - **Saving:** explicit (`⌘/ctrl+enter` or save; `esc` cancels). An unsaved draft is kept in localStorage. While the editor is open it owns typing (the "type anywhere focuses the commit input" rule pauses).
 - A day's notes list oldest first.
 - No search or tags.
@@ -99,15 +99,17 @@ The parser returns structured segments plus a normalized display string (`2 Samu
 ## 3. Screens
 
 ### Today
-1. Commit input: auto-focused on desktop; typing anywhere focuses it. Live preview line underneath. `enter` commit · `esc` clear · `↑` recall last. On touch devices a "commit ↵" button appears once the input parses.
+1. Commit input: auto-focused on desktop; typing anywhere focuses it (not while a note editor or sheet is open). Live preview line underneath. `enter` commit · `esc` clear · `↑` recall last. On touch devices a "commit ↵" button appears once the input parses.
 2. New users see example chips (`john 1`, `psalm 23`, `gen 1-3`) instead of history.
-3. Streak: number, status ("committed today" / "nothing committed yet today"), this week's dots.
-4. The year heatmap. Hover (desktop) or tap (mobile) shows date · verses.
-5. Recent commits: date and normalized passage, with delete (inline confirm). Last 10, then "load more". Each commit has a "note" action: a new note on that commit's day, verses prefilled from the commit.
-6. Notes: today's notes and "+ note".
+3. **Today block**, right under the input: what you've done today, building downward. A `today · N verses` header and today's readings, oldest first (each with "note" and × with inline confirm), then today's notes and "+ note". With nothing yet, just "+ note". A new commit washes into this list.
+4. Streak: number, status ("committed today" / "nothing committed yet today"), this week's dots.
+5. The year heatmap. Hover (desktop) shows date · verses; click or tap opens the day sheet.
+6. **Earlier:** recent commits before today, grouped by day (date shown once, with a dot if the day has notes; the date opens the day sheet), each with "note" and delete. Last 10 commits, then "load more".
+
+Long notes show about six lines, fading out, with "more".
 
 ### Day sheet
-Opened from a heatmap cell or a commit's date, like the book sheet. Shows that day's commits and notes, and "+ note" for that day. Days with notes get a subtle mark on the heatmap. On mobile the note editor is a full-height sheet.
+Opened from a heatmap cell or a date in Earlier, like the book sheet. Shows that day's readings (same list as Today's, with note and delete) and notes, and "+ note" for that day. Days with notes get a subtle mark on the heatmap. On mobile the note editor is a full-height sheet.
 
 ### Canon
 1. Coverage %, chapter count, "chapters read more than once".
@@ -207,7 +209,7 @@ Heatmap, coverage, and streak are derived by query. If it gets slow, add a `user
 |---|---|---|
 | POST | `/api/parse` | `{text}` → segments, display, verse count, date (no write) |
 | POST | `/api/commits` | `{text, readOn?}` → created commit (server re-parses) |
-| GET | `/api/commits?cursor=` | recent commits, paginated |
+| GET | `/api/commits?cursor=` | recent commits, paginated; `?on=YYYY-MM-DD` gives one day's commits instead |
 | DELETE | `/api/commits/:id` | soft delete (powers undo) |
 | GET | `/api/me` | profile, timezone, prefs |
 | PATCH | `/api/me` | timezone, mode_pref |
@@ -221,7 +223,8 @@ Heatmap, coverage, and streak are derived by query. If it gets slow, add a `user
 | GET | `/api/notes?bookId=&chapter=` | notes whose ranges touch that chapter |
 | POST | `/api/notes` | `{writtenOn, body, verses}` → created note (server parses `verses`) |
 | PATCH | `/api/notes/:id` | `{body?, verses?}` |
-| DELETE | `/api/notes/:id` | soft delete (powers undo) |
+| DELETE | `/api/notes/:id` | soft delete |
+| POST | `/api/notes/:id/restore` | undo a delete |
 | GET | `/api/openapi.json` | spec |
 
 **Auth headers:** `Authorization: Bearer <clerk jwt>` or `Authorization: Guest <token>`. The web app keeps the guest token in localStorage (native: Keychain).

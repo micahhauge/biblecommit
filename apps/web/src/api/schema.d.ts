@@ -184,6 +184,8 @@ export interface paths {
                 query?: {
                     /** @description `nextCursor` from the previous page; omit for the first page */
                     cursor?: string;
+                    /** @description Only that local date's commits, all on one page (no cursor) */
+                    on?: string;
                 };
                 header?: never;
                 path?: never;

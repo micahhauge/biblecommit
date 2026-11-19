@@ -6,10 +6,10 @@ import styles from './Sheet.module.css';
 
 /**
  * A titled dialog: a bottom sheet on mobile, centered on desktop. Closes on esc, the close
- * button, or the scrim. Focus moves in, stays in while tabbing, and goes back on close; the
- * page behind doesn't scroll.
+ * button, or the scrim (something inside that wants esc, like an editor, stops it propagating).
+ * Focus moves in, stays in while tabbing, and goes back on close; the page behind doesn't scroll.
  */
-export function Sheet({ title, onClose, children }: { title: ReactNode; onClose(): void; children: ReactNode }) {
+export function Sheet({ title, onClose, className, children }: { title: ReactNode; onClose(): void; className?: string; children: ReactNode }) {
   const titleId = useId();
   const dialog = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -21,7 +21,7 @@ export function Sheet({ title, onClose, children }: { title: ReactNode; onClose(
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') close.current();
       if (e.key !== 'Tab' || !dialog.current) return;
-      const stops = [...dialog.current.querySelectorAll<HTMLElement | SVGElement>('button, [tabindex="0"]')];
+      const stops = [...dialog.current.querySelectorAll<HTMLElement | SVGElement>('button, a[href], input, textarea, [tabindex="0"]')];
       const edge = e.shiftKey ? stops[0] : stops.at(-1);
       if (document.activeElement === edge || document.activeElement === dialog.current) {
         e.preventDefault();
@@ -42,7 +42,7 @@ export function Sheet({ title, onClose, children }: { title: ReactNode; onClose(
   return createPortal(
     <>
       <div className={styles.scrim} data-testid="scrim" onClick={onClose} />
-      <div ref={dialog} className={styles.sheet} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+      <div ref={dialog} className={className ? `${styles.sheet} ${className}` : styles.sheet} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <div className={styles.grab} aria-hidden="true" />
         <button type="button" className={styles.close} onClick={onClose}>
           close

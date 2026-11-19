@@ -11,14 +11,14 @@ const server = await useTestServer();
 
 const input = () => screen.getByRole('textbox', { name: /what did you read/i });
 const preview = () => screen.getByRole('status');
-const recentList = () => screen.findByRole('list', { name: /recent commits/i });
+/** Today's readings (the "today" block), oldest first. */
+const todayList = () => screen.findByRole('list', { name: 'read today' });
 
-/** The passages in the recent list, top to bottom. */
+/** Every passage shown: today's readings, then earlier days', top to bottom. */
 async function passages() {
-  const list = await recentList();
-  return within(list)
-    .queryAllByRole('listitem')
-    .map((li) => within(li).getByTestId('passage').textContent);
+  return ['read today', 'earlier']
+    .map((name) => screen.queryByRole('list', { name }))
+    .flatMap((list) => (list ? within(list).queryAllByTestId('passage').map((p) => p.textContent) : []));
 }
 
 /** Commits each reading in turn through the input, waiting for each to land. */
@@ -35,7 +35,8 @@ describe('a first-time visitor', () => {
     renderPage(<Today />);
     const chips = screen.getByRole('group', { name: /examples/i });
     expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['john 1', 'psalm 23', 'gen 1-3']);
-    expect(screen.queryByRole('list', { name: /recent commits/i })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'read today' })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'earlier' })).toBeNull();
     // Give any stray effects a chance to fire.
     await new Promise((r) => setTimeout(r, 50));
     expect(server.requests).toEqual([]);
@@ -68,20 +69,21 @@ describe('the live preview', () => {
 });
 
 describe('committing', () => {
-  it('creates a guest on the first commit, then shows the commit in the recent list', async () => {
+  it('creates a guest on the first commit, then shows the commit in today\'s readings', async () => {
     const user = userEvent.setup();
     renderPage(<Today />);
     await user.type(input(), 'john 3{Enter}');
 
-    const list = await screen.findByRole('list', { name: /recent commits/i });
+    const list = await todayList();
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(1));
-    expect(within(list).getByRole('listitem')).toHaveTextContent('todayJohn 3');
+    expect(within(list).getByTestId('passage')).toHaveTextContent('John 3');
+    expect(screen.getByRole('heading', { name: /today\s*36 verses/ })).toBeInTheDocument();
     expect(input()).toHaveValue('');
     expect(preview()).toHaveTextContent('committed.');
     expect(screen.queryByRole('group', { name: /examples/i })).toBeNull();
     expect(server.requests.slice(0, 2)).toEqual(['POST /api/guests', 'POST /api/commits']);
-    // The new guest's first fetches are the streak and the year; the recent list was seeded from the commit.
-    await waitFor(() => expect(server.requests.slice(2).sort()).toEqual(['GET /api/me/today', 'GET /api/me/year']));
+    // The new guest's first fetches are the streak, the year, and today's notes; the recent list was seeded from the commit.
+    await waitFor(() => expect(server.requests.slice(2).sort()).toEqual(['GET /api/me/today', 'GET /api/me/year', 'GET /api/notes']));
   });
 
   it('reuses the guest for later commits', async () => {
@@ -102,7 +104,7 @@ describe('committing', () => {
     first.unmount();
 
     renderPage(<Today />);
-    const list = await screen.findByRole('list', { name: /recent commits/i });
+    const list = await todayList();
     expect(await within(list).findByText('Psalm 23')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /examples/i })).toBeNull();
   });
@@ -170,7 +172,7 @@ describe('on a touch device', () => {
   });
 });
 
-describe('deleting from the recent list', () => {
+describe('deleting a commit', () => {
   it('asks inline before deleting; "no" keeps the row, "yes" removes it for good', async () => {
     const user = userEvent.setup();
     renderPage(<Today />);
@@ -357,7 +359,7 @@ describe('the streak', () => {
     expect(status()).toHaveTextContent('committed today');
   });
 
-  it('drops when a commit is deleted from the recent list', async () => {
+  it('drops when a commit is deleted', async () => {
     await returningGuest('2026-11-07', '2026-11-08');
     const user = userEvent.setup();
     renderPage(<Today />);

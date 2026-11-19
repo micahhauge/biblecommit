@@ -1,0 +1,25 @@
+.sub {
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+  line-height: 1.7;
+  margin: 10px 0 22px;
+}
+.heading {
+  margin-top: 0 !important;
+}
+.quiet {
+  font-family: var(--mono), monospace;
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 12px;
+}
+/* On phones the day sheet is near full height: room to write. */
+@media (max-width: 760px) {
+  /* Doubled to beat .sheet's max-height regardless of stylesheet order. */
+  .full.full {
+    min-height: 92dvh;
+    max-height: 100dvh;
+  }
+}

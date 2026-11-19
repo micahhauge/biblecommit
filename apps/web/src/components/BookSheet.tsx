@@ -1,8 +1,11 @@
 'use client';
 
-import { chapterLabel, chapterLevel, getBook, readLabel, verseLabel, verseReads, type ChapterReads } from '@biblecommit/core';
+import { chapterLabel, chapterLevel, dayLabel, getBook, getChapter, localDate, readLabel, verseLabel, verseReads, type ChapterReads } from '@biblecommit/core';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { browserTimezone } from '@/guest';
+import { useChapterNotes } from '@/notes';
 import { useHasUser } from '@/session';
+import { Markdown } from './Markdown';
 import { useBookReads } from '@/me';
 import { useWidth } from '@/use-width';
 import styles from './BookSheet.module.css';
@@ -46,6 +49,9 @@ export function BookSheet({ bookId, chapters, chapter: initialChapter = null, on
   const hasUser = useHasUser();
   const verses = useBookReads(bookId);
   const bookVerses = hasUser ? verses.data?.chapters.map((c) => c.verses) : verseReads([], bookId);
+  // How many notes link to each verse, by chapter.
+  const bookNotes = hasUser ? verses.data?.chapters.map((c) => c.notes) : undefined;
+  const chapterHasNotes = (n: number) => !!bookNotes?.[n - 1]?.some((x) => x > 0);
 
   const read = chapters.filter((c) => c.times >= 1).length;
   const readings = chapters.reduce((sum, c) => sum + c.times, 0);
@@ -78,7 +84,8 @@ export function BookSheet({ bookId, chapters, chapter: initialChapter = null, on
         {chapters.map((reads, i) => {
           const n = i + 1;
           const level = chapterLevel(reads);
-          const label = `${chapterLabel(bookId, n)} · ${readLabel(reads)}`;
+          const noted = chapterHasNotes(n);
+          const label = `${chapterLabel(bookId, n)} · ${readLabel(reads)}${noted ? ' · notes' : ''}`;
           const x = (i % cols) * (size + gap);
           const y = Math.floor(i / cols) * (size + gap);
           return (
@@ -98,6 +105,7 @@ export function BookSheet({ bookId, chapters, chapter: initialChapter = null, on
               <text className={`${styles.cn} ${level >= 3 ? styles.light : ''}`} x={x + size / 2} y={y + size / 2 + 4} textAnchor="middle">
                 {n}
               </text>
+              {noted && <circle className={styles.noteMark} data-note-chapter={n} cx={x + size - 6} cy={y + 6} r={2.6} />}
             </g>
           );
         })}
@@ -108,6 +116,7 @@ export function BookSheet({ bookId, chapters, chapter: initialChapter = null, on
           bookId={bookId}
           chapter={chapter}
           verses={bookVerses?.[chapter - 1]}
+          notes={bookNotes?.[chapter - 1]}
           error={hasUser && verses.error ? verses.error.message : null}
           width={width}
           onReadout={setReadout}
@@ -127,13 +136,18 @@ interface StripProps {
   chapter: number;
   /** Read count of each verse; undefined while loading. */
   verses: readonly number[] | undefined;
+  /** How many notes link to each verse; undefined while loading. */
+  notes?: readonly number[];
   error: string | null;
   width: number;
   onReadout(text: string): void;
 }
 
 /** One small cell per verse of a chapter, wrapping to the sheet's width, deeper for verses read more. */
-function VerseStrip({ bookId, chapter, verses, error, width, onReadout }: StripProps) {
+function VerseStrip({ bookId, chapter, verses, notes, error, width, onReadout }: StripProps) {
+  // The tapped verse with notes, whose notes show under the strip.
+  const [noteVerse, setNoteVerse] = useState<number | null>(null);
+  useEffect(() => setNoteVerse(null), [chapter]);
   const name = chapterLabel(bookId, chapter);
   const size = 14;
   const gap = 4;
@@ -150,8 +164,15 @@ function VerseStrip({ bookId, chapter, verses, error, width, onReadout }: StripP
   /** The verse under a pointer event, from the cell's data-v. */
   const describe = (target: EventTarget) => {
     const v = target instanceof Element ? target.getAttribute('data-v') : null;
-    if (v === null || !verses) return;
-    onReadout(`${verseLabel(bookId, chapter, Number(v))} · ${readLabel(verseAsReads(verses[Number(v) - 1]!))}`);
+    if (v === null || !verses) return null;
+    const count = notes?.[Number(v) - 1] ?? 0;
+    const noted = count ? ` · ${count} note${count === 1 ? '' : 's'}` : '';
+    onReadout(`${verseLabel(bookId, chapter, Number(v))} · ${readLabel(verseAsReads(verses[Number(v) - 1]!))}${noted}`);
+    return Number(v);
+  };
+  const tap = (target: EventTarget) => {
+    const v = describe(target);
+    if (v !== null) setNoteVerse(notes?.[v - 1] ? v : null);
   };
 
   return (
@@ -171,7 +192,7 @@ function VerseStrip({ bookId, chapter, verses, error, width, onReadout }: StripP
             aria-label={`${read} of ${verses.length} verses of ${name} read`}
             viewBox={`0 0 ${cols * (size + gap) - gap} ${Math.ceil(verses.length / cols) * (size + gap) - gap}`}
             onMouseOver={(e) => describe(e.target)}
-            onClick={(e) => describe(e.target)}
+            onClick={(e) => tap(e.target)}
           >
             <g className={styles.cells}>
               {verses.map((n, i) => {
@@ -193,8 +214,54 @@ function VerseStrip({ bookId, chapter, verses, error, width, onReadout }: StripP
                 );
               })}
             </g>
+            <g aria-hidden="true">
+              {notes?.map((count, i) =>
+                count > 0 ? (
+                  <circle
+                    key={i}
+                    className={styles.noteMark}
+                    data-note-verse={i + 1}
+                    cx={(i % cols) * (size + gap) + size / 2}
+                    cy={Math.floor(i / cols) * (size + gap) + size + 1.6}
+                    r={1.5}
+                  />
+                ) : null,
+              )}
+            </g>
           </svg>
+          {notes?.some((n) => n > 0) && noteVerse === null && <div className={styles.sub}>dotted verses have notes · tap one</div>}
+          {noteVerse !== null && <VerseNotes bookId={bookId} chapter={chapter} verse={noteVerse} />}
         </>
+      )}
+    </section>
+  );
+}
+
+/** The notes linked to one verse, read-only, oldest first. */
+function VerseNotes({ bookId, chapter, verse }: { bookId: number; chapter: number; verse: number }) {
+  const notes = useChapterNotes(bookId, chapter);
+  const id = getChapter(bookId, chapter)!.firstVerseId + verse - 1;
+  const today = localDate(new Date(), browserTimezone());
+  const touching = notes.data?.filter((n) => n.ranges.some((r) => r.start <= id && id <= r.end));
+  const name = verseLabel(bookId, chapter, verse);
+  return (
+    <section className={styles.verseNotes} aria-label={`notes on ${name}`}>
+      <h4>notes on {name.toLowerCase()}</h4>
+      {notes.error ? (
+        <p className="empty">{notes.error.message}</p>
+      ) : !touching ? (
+        <div className={styles.sub}>·</div>
+      ) : (
+        <ul>
+          {touching.map((n) => (
+            <li key={n.id}>
+              <div className={styles.noteMeta}>
+                {dayLabel(n.writtenOn, today)} · {n.versesDisplay}
+              </div>
+              <Markdown>{n.body}</Markdown>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

@@ -82,6 +82,18 @@ The parser returns structured segments plus a normalized display string (`2 Samu
 - Grid: one row per book (wraps to the screen width), grouped by section (Law, History, Wisdom & Poetry, Major Prophets, Minor Prophets, Gospels & Acts, Epistles, Apocalypse). Depth = times the whole chapter was read, i.e. the minimum read count across its verses (1×, 2×, 3+). Partly read chapters get their own level, lighter than 1×.
 - Tap a book → sheet with numbered chapter cells. Tap a chapter → verse strip showing which verses were read and how often.
 
+### Day notes
+- A **note** is markdown you write on a day (`written_on`), optionally linked to verses. A day can have many notes. Notes are not linked to commits.
+- Notes never touch streak, heatmap intensity, or coverage. Only commits are reading.
+- Notes are always private (friends, when they ship, never see them). Guests can write notes; claim moves them like commits.
+- **Body:** GitHub-flavored markdown, ≤ 20,000 chars. Raw HTML disabled, output sanitized. Links open in a new tab (`rel="noopener noreferrer"`). No title: lists show the first heading, else the first line, markdown stripped.
+- **Verses:** an optional field parsed by the commit parser, with the same live errors; save is blocked while it doesn't parse. Any verse is allowed, not just ones read that day. Date phrases in it are an error ("notes take their day from where you write them"). Overlaps are merged, as in commits.
+- **Day:** taken from where the note is written (today on Today, the sheet's date in the day sheet). Future days are rejected. A note can't move to another day; delete and rewrite.
+- **Edit:** body and verses are editable. Delete is soft, with inline confirm and an undo toast.
+- **Saving:** explicit (`⌘/ctrl+enter` or save; `esc` cancels). An unsaved draft is kept in localStorage. While the editor is open it owns typing (the "type anywhere focuses the commit input" rule pauses).
+- A day's notes list oldest first.
+- No search or tags.
+
 ---
 
 ## 3. Screens
@@ -91,12 +103,16 @@ The parser returns structured segments plus a normalized display string (`2 Samu
 2. New users see example chips (`john 1`, `psalm 23`, `gen 1-3`) instead of history.
 3. Streak: number, status ("committed today" / "nothing committed yet today"), this week's dots.
 4. The year heatmap. Hover (desktop) or tap (mobile) shows date · verses.
-5. Recent commits: date and normalized passage, with delete (inline confirm). Last 10, then "load more".
+5. Recent commits: date and normalized passage, with delete (inline confirm). Last 10, then "load more". Each commit has a "note" action: a new note on that commit's day, verses prefilled from the commit.
+6. Notes: today's notes and "+ note".
+
+### Day sheet
+Opened from a heatmap cell or a commit's date, like the book sheet. Shows that day's commits and notes, and "+ note" for that day. Days with notes get a subtle mark on the heatmap. On mobile the note editor is a full-height sheet.
 
 ### Canon
 1. Coverage %, chapter count, "chapters read more than once".
-2. Chapter grid. Hover/tap shows `Genesis 12 · read 2×`.
-3. Book sheet → chapter → verse detail.
+2. Chapter grid. Hover/tap shows `Genesis 12 · read 2×`. No note marks here.
+3. Book sheet → chapter → verse detail. Chapters with any noted verse get a mark in the book sheet; noted verses get a mark in the verse strip, and tapping one lists its notes.
 
 ### Chrome
 Wordmark `bible`*`commit`*, two tabs, a mode toggle, a settings sheet. Empty states for everything.
@@ -122,7 +138,7 @@ packages/db       Drizzle schema, migrations, seed (books/chapters)
 
 ### Guest mode
 - Guest data lives **server-side**: a guest is a normal user row authenticated by a random secret token held by the browser. All read paths are identical for guests and signed-in users.
-- The guest is created on the **first commit**, not on page load. Before that, the app shows the empty state and example chips with no API calls (the parser runs locally).
+- The guest is created on the **first commit or note**, not on page load. Before that, the app shows the empty state and example chips with no API calls (the parser runs locally).
 - **Sign in → claim:** the guest's commits move to the Clerk account. A new account adopts the guest row; an existing account gets the commits merged in (union; nothing dropped).
 - **Sign out →** the browser starts as a fresh, empty guest. Claimed data is only reachable by signing in.
 - Unclaimed guests are kept indefinitely in v1.
@@ -165,7 +181,25 @@ commit_ranges
   start_verse_id  int not null
   end_verse_id    int not null      -- inclusive
   index (commit_id)
+
+notes
+  id              uuid pk
+  user_id         uuid fk → users (cascade)
+  written_on      date not null     -- user's local day
+  body            text not null     -- markdown, ≤ 20k chars
+  verses_input    text not null default ''  -- the verses field as typed
+  verses_display  text not null default ''  -- normalized, e.g. "Romans 8:28–30"
+  created_at, updated_at  timestamptz
+  deleted_at      timestamptz null  -- soft delete
+  index (user_id, written_on)
+
+note_ranges       -- join: note ↔ verses, as inclusive verse-ID ranges
+  note_id         uuid fk → notes (cascade)
+  start_verse_id  int not null
+  end_verse_id    int not null      -- inclusive
+  index (note_id), index (start_verse_id, end_verse_id)
 ```
+Notes live in their own tables so they can never leak into reading stats.
 Heatmap, coverage, and streak are derived by query. If it gets slow, add a `user_chapter_reads` rollup later.
 
 ### API (v1)
@@ -178,16 +212,21 @@ Heatmap, coverage, and streak are derived by query. If it gets slow, add a `user
 | GET | `/api/me` | profile, timezone, prefs |
 | PATCH | `/api/me` | timezone, mode_pref |
 | GET | `/api/me/today` | streak, this week, today's commits |
-| GET | `/api/me/year?end=` | 371 daily verse totals + bucket thresholds |
+| GET | `/api/me/year?end=` | 371 daily verse totals + bucket thresholds + `hasNote` per day |
 | GET | `/api/me/canon` | per-chapter read counts (1,189) + coverage |
-| GET | `/api/me/canon/:bookId` | per-verse read counts for that book |
-| POST | `/api/guests` | `{timezone}` → `{token}` (no auth; called once, right before the first commit) |
+| GET | `/api/me/canon/:bookId` | per-verse read counts + note counts for that book |
+| POST | `/api/guests` | `{timezone}` → `{token}` (no auth; called once, right before the first commit or note) |
 | POST | `/api/me/claim` | Clerk JWT + `{guestToken}` → move guest data to the account (idempotent) |
+| GET | `/api/notes?on=YYYY-MM-DD` | a day's notes, oldest first |
+| GET | `/api/notes?bookId=&chapter=` | notes whose ranges touch that chapter |
+| POST | `/api/notes` | `{writtenOn, body, verses}` → created note (server parses `verses`) |
+| PATCH | `/api/notes/:id` | `{body?, verses?}` |
+| DELETE | `/api/notes/:id` | soft delete (powers undo) |
 | GET | `/api/openapi.json` | spec |
 
 **Auth headers:** `Authorization: Bearer <clerk jwt>` or `Authorization: Guest <token>`. The web app keeps the guest token in localStorage (native: Keychain).
 
-**Claim rules:** no row for this Clerk id → the guest row adopts it (`clerk_user_id` set, `guest_token_hash` cleared). A row exists → guest commits are reassigned to it and the guest row is deleted; the existing account's timezone/prefs win. Unknown or already-claimed token → 204 no-op. The client calls claim right after sign-in when it holds a guest token, then drops the token.
+**Claim rules:** no row for this Clerk id → the guest row adopts it (`clerk_user_id` set, `guest_token_hash` cleared). A row exists → guest commits and notes are reassigned to it and the guest row is deleted; the existing account's timezone/prefs win. Unknown or already-claimed token → 204 no-op. The client calls claim right after sign-in when it holds a guest token, then drops the token.
 
 ---
 

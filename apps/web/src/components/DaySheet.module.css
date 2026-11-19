@@ -1,0 +1,25 @@
+.heading {
+  margin-top: 0 !important;
+}
+.read {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 20px;
+}
+.quiet {
+  font-family: var(--mono), monospace;
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 12px;
+}
+/* On phones the day sheet is near full height: room to write. */
+@media (max-width: 760px) {
+  .full {
+    min-height: 92dvh;
+    max-height: 100dvh;
+  }
+}

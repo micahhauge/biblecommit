@@ -1,0 +1,96 @@
+/* A note's rendered markdown: serif prose, mono for code, quiet rules. */
+.md {
+  font-family: var(--serif), Georgia, serif;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md pre,
+.md table {
+  margin: 0 0 0.7em;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  font-family: inherit;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink);
+  margin: 0.9em 0 0.4em;
+  line-height: 1.25;
+}
+.md h1 {
+  font-size: 1.4em;
+}
+.md h2 {
+  font-size: 1.2em;
+}
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  font-size: 1em;
+}
+.md ul,
+.md ol {
+  padding-left: 1.3em;
+}
+.md li:has(> input[type='checkbox']) {
+  list-style: none;
+  margin-left: -1.3em;
+}
+.md input[type='checkbox'] {
+  accent-color: rgb(var(--pig));
+  margin-right: 0.4em;
+}
+.md blockquote {
+  border-left: 2px solid rgb(var(--pig) / 0.5);
+  padding-left: 0.9em;
+  color: var(--dim);
+  font-style: italic;
+}
+.md code {
+  font-family: var(--mono), monospace;
+  font-size: 0.8em;
+}
+.md pre {
+  padding: 10px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.md a {
+  color: rgb(var(--pig));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--hair);
+  margin: 1em 0;
+}
+.md table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.md th,
+.md td {
+  border: 1px solid var(--hair);
+  padding: 4px 8px;
+  text-align: left;
+}

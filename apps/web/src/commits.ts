@@ -1,6 +1,6 @@
 'use client';
 
-import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import type { components } from '@/api/schema';
 import { browserTimezone, getGuestToken, guestAuthorization, setGuestToken, useHasGuest } from '@/guest';
@@ -11,6 +11,11 @@ type Page = components['schemas']['CommitList'];
 type Recent = InfiniteData<Page, string | null>;
 
 const recentKey = ['commits', 'recent'] as const;
+/** Prefix of every single-day commit list (the day sheet). */
+const dayCommitsKey = ['commits', 'day'] as const;
+/** Refetches every commit list: recent, and any day. */
+const invalidateCommitLists = (queryClient: ReturnType<typeof useQueryClient>) =>
+  Promise.all([recentKey, dayCommitsKey].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 
 /**
  * Recent commits, a page at a time (`fetchNextPage` for "load more").
@@ -32,14 +37,14 @@ export function useRecentCommits() {
   });
 }
 
-async function createGuest(): Promise<string> {
+export async function createGuest(): Promise<string> {
   const { data, error } = await api.POST('/api/guests', { body: { timezone: browserTimezone() } });
   if (error || !data) throw new Error('could not start a guest session');
   return data.token;
 }
 
 /** fetch rejects with a TypeError when the network fails; turn that into a readable error. */
-function networkError(e: unknown, what: string) {
+export function networkError(e: unknown, what: string) {
   return e instanceof TypeError ? new Error(`could not ${what}; check your connection`) : e;
 }
 
@@ -65,7 +70,7 @@ export function useCommit({ onSaved }: { onSaved?: (commit: Commit) => void } = 
       if (existing) {
         const commit = await postCommit(text, existing);
         onSaved?.(commit);
-        await Promise.all([queryClient.invalidateQueries({ queryKey: recentKey }), invalidateReading(queryClient)]);
+        await Promise.all([invalidateCommitLists(queryClient), invalidateReading(queryClient)]);
         return commit;
       }
 
@@ -134,6 +139,20 @@ export function useDeleteCommit() {
         },
       );
     },
-    onSettled: () => Promise.all([queryClient.invalidateQueries({ queryKey: recentKey }), invalidateReading(queryClient)]),
+    onSettled: () => Promise.all([invalidateCommitLists(queryClient), invalidateReading(queryClient)]),
+  });
+}
+
+/** One day's commits, newest first. Never fetches until this browser has a guest (or account). */
+export function useCommitsOn(date: string) {
+  const hasGuest = useHasGuest();
+  return useQuery({
+    queryKey: [...dayCommitsKey, date],
+    enabled: hasGuest,
+    queryFn: async () => {
+      const { data, error } = await api.GET('/api/commits', { params: { query: { on: date } } });
+      if (error || !data) throw new Error('could not load that day');
+      return data.commits;
+    },
   });
 }

@@ -71,3 +71,14 @@
     mask-image: linear-gradient(to right, transparent, #000 28px);
   }
 }
+
+/* A day with notes: a small ink dot in the cell's corner. */
+.note {
+  fill: var(--ink);
+  stroke: var(--paper);
+  stroke-width: 0.8;
+  pointer-events: none;
+}
+.c {
+  cursor: pointer;
+}

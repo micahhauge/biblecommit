@@ -171,3 +171,28 @@
     animation: none;
   }
 }
+
+/* Notes: an ink dot on chapters and under verses that have them, and the tapped verse's notes. */
+.noteMark {
+  fill: var(--ink);
+  stroke: var(--paper);
+  stroke-width: 0.8;
+  pointer-events: none;
+}
+.verseNotes ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 18px;
+}
+.verseNotes li {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hair);
+}
+.noteMeta {
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: rgb(var(--pig));
+  margin-bottom: 6px;
+}

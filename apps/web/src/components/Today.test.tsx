@@ -80,8 +80,8 @@ describe('committing', () => {
     expect(preview()).toHaveTextContent('committed.');
     expect(screen.queryByRole('group', { name: /examples/i })).toBeNull();
     expect(server.requests.slice(0, 2)).toEqual(['POST /api/guests', 'POST /api/commits']);
-    // The new guest's first fetches are the streak and the year; the recent list was seeded from the commit.
-    await waitFor(() => expect(server.requests.slice(2).sort()).toEqual(['GET /api/me/today', 'GET /api/me/year']));
+    // The new guest's first fetches are the streak, the year, and today's notes; the recent list was seeded from the commit.
+    await waitFor(() => expect(server.requests.slice(2).sort()).toEqual(['GET /api/me/today', 'GET /api/me/year', 'GET /api/notes']));
   });
 
   it('reuses the guest for later commits', async () => {

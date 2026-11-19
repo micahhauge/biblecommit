@@ -379,6 +379,7 @@ const listCommitsRoute = createRoute({
   request: {
     query: z.object({
       cursor: z.string().optional().openapi({ description: '`nextCursor` from the previous page; omit for the first page' }),
+      on: z.iso.date().optional().openapi({ description: 'Only that local date\'s commits, all on one page (no cursor)' }),
     }),
   },
   responses: {
@@ -623,7 +624,8 @@ export function createApp(deps: Deps, { now = () => new Date() }: Options = {}) 
   app.openapi(listCommitsRoute, async (c) => {
     const user = await caller(c);
     if (!user) return c.json({ error: 'sign in or start as a guest' }, 401);
-    const { cursor } = c.req.valid('query');
+    const { cursor, on } = c.req.valid('query');
+    if (on !== undefined) return c.json({ commits: await deps.listCommitsOn(user.id, on), nextCursor: null }, 200);
     const after = cursor === undefined ? undefined : decodeCursor(cursor);
     if (cursor !== undefined && !after) return c.json({ error: 'malformed cursor' }, 400);
     // One extra tells us whether there's another page.

@@ -1,0 +1,167 @@
+/* A day's notes: rendered markdown under a quiet verses line, and a mono editor. */
+/* Inside a sheet, the section sits under the sheet's own rhythm. */
+.sheetHeading {
+  font-family: var(--mono), monospace;
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--dim);
+  margin: 30px 0 14px;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+  display: grid;
+  gap: 22px;
+}
+.note {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--hair);
+  animation: in 0.4s ease-out both;
+}
+.verses {
+  font-family: var(--mono), monospace;
+  font-size: 12px;
+  color: rgb(var(--pig));
+  margin-bottom: 8px;
+}
+.actions,
+.confirm {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 8px;
+  font-family: var(--mono), monospace;
+  font-size: 11px;
+  color: var(--dim);
+}
+.actions button,
+.confirm button {
+  color: var(--faint);
+  padding: 2px 0;
+}
+.actions button:hover,
+.actions button:focus-visible,
+.confirm button:hover,
+.confirm button:focus-visible {
+  color: var(--ink);
+}
+.confirm {
+  margin-top: 0;
+  color: var(--dim);
+}
+.confirm button:first-of-type {
+  color: rgb(var(--pig));
+}
+.add {
+  font-family: var(--mono), monospace;
+  font-size: 12px;
+  color: var(--dim);
+  border: 1px dashed var(--hair);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+.add:hover,
+.add:focus-visible {
+  color: rgb(var(--pig));
+  border-color: rgb(var(--pig) / 0.5);
+}
+
+.editor {
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  padding: 12px 14px 10px;
+  background: var(--paper);
+}
+.versesInput,
+.body {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  caret-color: rgb(var(--pig));
+  font-family: var(--mono), monospace;
+}
+.versesInput {
+  font-size: 13px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hair);
+}
+.versesInput::placeholder,
+.body::placeholder {
+  color: var(--faint);
+}
+.parse {
+  font-size: 11px;
+  min-height: 1.6em;
+  line-height: 1.6;
+  margin: 4px 0 6px;
+  color: var(--dim);
+}
+.ok {
+  color: rgb(var(--pig));
+}
+.err {
+  font-style: italic;
+  color: var(--dim);
+}
+.body {
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 9em;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.hint {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+}
+.bar button {
+  color: var(--dim);
+}
+.bar button:hover,
+.bar button:focus-visible {
+  color: var(--ink);
+}
+.bar .save {
+  color: rgb(var(--pig));
+  border: 1px solid rgb(var(--pig) / 0.5);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.bar .save:disabled {
+  color: var(--faint);
+  border-color: var(--hair);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 70;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 16px;
+  font-family: var(--mono), monospace;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  transform: translateX(-50%);
+}
+.toast button {
+  color: rgb(var(--pig));
+}

@@ -99,6 +99,19 @@
   font-family: var(--mono), monospace;
   font-size: 11px;
   color: var(--dim);
+  justify-self: start;
+  text-align: left;
+  padding: 0;
+}
+.when:hover,
+.when:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rowActions {
+  display: inline-flex;
+  gap: 2px;
 }
 .passage {
   font-size: 18px;
